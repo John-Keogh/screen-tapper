@@ -1,0 +1,27 @@
+# Arduino
+*.hex
+*.elf
+*.bin
+*.o
+*.d
+*.map
+*.dep
+*.a
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Backup files
+*~
+*.bak
+
+# Logs
+*.log
+
+# VS Code or other IDE folders
+.vscode/
+.idea/
+
+# Arduino build folder
+build/
