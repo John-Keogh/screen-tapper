@@ -106,9 +106,11 @@ const uint8_t BYTES_PER_SLOT = sizeof(uint32_t); // gem counts are stored as uin
 const uint16_t USABLE_EEPROM = EEPROM.length() - GEM_SLOTS_START; // 4096 - 256 = 3840 bytes available for gem data
 const uint16_t MAX_GEM_SLOTS = USABLE_EEPROM / BYTES_PER_SLOT;  // 3840 / 4 = 960 slots
 const uint8_t GEMS_PER_SAVE = 25; // min number of gems before updating lifetime EEPROM count
-uint16_t sessionGemCount = 0;
+uint32_t sessionGemCount = 0;
+uint32_t displayedGemCount = 0;
 int activationCount = 0;
 uint32_t lifetimeGemCount = 0; // initialization - will be read from EEPROM later
+// showing 4294967295 at reset?
 
 
 void setup() {
@@ -136,11 +138,18 @@ void setup() {
   randomSeed(analogRead(0));
 
   // Initialization for lifetime gem count - only for first time use
-  uint8_t storedSlot = EEPROM.read(SLOT_INDEX_ADDR);
-  if (storedSlot == 0xFF) {
-    Serial.print("Type 0xFF detected in slot index address.");
-    Serial.print("Initializing slot index address to be 0.");
-    EEPROM.update(SLOT_INDEX_ADDR, 0);
+  uint16_t storedSlot;
+  EEPROM.get(SLOT_INDEX_ADDR, storedSlot);
+  if (storedSlot == 0xFFFF) {  // both bytes are 0xFF
+    Serial.println("EEPROM uninitialized. Initializing slot index to 0.");
+    EEPROM.put(SLOT_INDEX_ADDR, (uint16_t)0);
+  } else {
+    Serial.println("EEPROM already initialized.");
+    // uncomment if manually resetting EEPROM lifetime gem data
+    // Serial.println("Resetting EEPROM lifetime gem data.");
+    // clearGemCountEEPROM();
+    Serial.print("Slot Index Address: ");
+    Serial.println(storedSlot);
   }
 
   lifetimeGemCount = readLifetimeGemCount();
@@ -203,6 +212,7 @@ void loop() {
     saveGemCount(lifetimeGemCount);
     sessionGemCount = 0;
   }
+  displayedGemCount = lifetimeGemCount + sessionGemCount;
 }
 
 void scheduleNextTap() {
@@ -430,7 +440,7 @@ void updateLcdDisplay() {
   else if (displayState == 1) {
     lcd.print("Lifetime Gems:  ");
     lcd.setCursor(0, 1);
-    lcd.print(lifetimeGemCount);
+    lcd.print(displayedGemCount);
   }
 }
 
@@ -459,4 +469,12 @@ void saveGemCount(uint32_t countToSave) {
 
   EEPROM.put(writeAddress, countToSave);
   EEPROM.put(SLOT_INDEX_ADDR, nextSlotIndex);
+}
+
+void clearGemCountEEPROM() {
+  // debug tool function for manually resetting all gem-related EEPROM data
+  for (uint16_t i = GEM_SLOTS_START; i < EEPROM.length(); ++i) {
+    EEPROM.update(i, 0);  // or EEPROM.write(i, 0)
+  }
+  EEPROM.put(SLOT_INDEX_ADDR, (uint16_t)0);
 }
