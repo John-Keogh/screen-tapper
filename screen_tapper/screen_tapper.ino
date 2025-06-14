@@ -1,6 +1,7 @@
 #include <LiquidCrystal.h>
 #include <Wire.h>
 #include <RTClib.h>
+#include <EEPROM.h>
 
 // ==== RTC ====
 RTC_DS1307 rtc;
@@ -23,6 +24,7 @@ const int MODE_TOGGLE_PIN = 39;
 const int TAP_DURATION_UP = 41;
 const int TAP_DURATION_DOWN = 43;
 const int GEM_RESET_BUTTON = 45;
+const int LCD_LED = 2;
 
 // ==== LCD ====
 LiquidCrystal lcd(29, 28, 31, 30, 33, 32);
@@ -30,6 +32,7 @@ enum LcdMode { OFF_MODE, SLEEP_MODE, ACTIVE_MODE };
 LcdMode currentLcdMode = OFF_MODE;
 LcdMode lastLcdMode = ACTIVE_MODE;  // force update on first run
 bool lcdEnabled = true;
+int lcdLightLevel = 255;
 
 // ==== Button Logic ====
 bool deviceEnabled = false;
@@ -78,10 +81,6 @@ unsigned long adGemTaps = adGemTapsActual;
 unsigned long floatGemTaps = floatGemTapsActual;
 unsigned long tapDuration = 35;
 
-// ==== Gem Tracking ====
-unsigned long gemCount = 0;
-unsigned long activationCount = 0;
-
 // ==== LCD Display Timing ====
 unsigned long lastDisplayChange = 0;
 const unsigned long displayInterval = 3000;
@@ -93,6 +92,23 @@ bool showTestModeMessage = false;
 String testModeMessage = "";
 unsigned long testModeMessageStart = 0;
 const unsigned long testModeMessageDuration = 2000;
+
+// ==== Gem Tracking (EEPROM) ====
+// EEPROM layout:
+//  - 0–1: uint16_t slot index (last used slot)
+//  - 2–255: reserved for future settings/data
+//  - 256–4095: gem count history (each 4 bytes)
+const uint16_t SETTINGS_START = 2;
+const uint16_t SETTINGS_SIZE = 254;
+const uint16_t SLOT_INDEX_ADDR = 0;
+const uint16_t GEM_SLOTS_START = 256;
+const uint8_t BYTES_PER_SLOT = sizeof(uint32_t); // gem counts are stored as uint32_t (4 bytes)
+const uint16_t USABLE_EEPROM = EEPROM.length() - GEM_SLOTS_START; // 4096 - 256 = 3840 bytes available for gem data
+const uint16_t MAX_GEM_SLOTS = USABLE_EEPROM / BYTES_PER_SLOT;  // 3840 / 4 = 960 slots
+const uint8_t GEMS_PER_SAVE = 25; // min number of gems before updating lifetime EEPROM count
+uint16_t sessionGemCount = 0;
+int activationCount = 0;
+uint32_t lifetimeGemCount = 0; // initialization - will be read from EEPROM later
 
 
 void setup() {
@@ -115,7 +131,19 @@ void setup() {
   pinMode(TAP_DURATION_UP, INPUT);
   pinMode(TAP_DURATION_DOWN, INPUT);
   pinMode(GEM_RESET_BUTTON, INPUT);
+  pinMode(LCD_LED, OUTPUT);
+  analogWrite(LCD_LED, 255); // 0 is always off; 255 is always on
   randomSeed(analogRead(0));
+
+  // Initialization for lifetime gem count - only for first time use
+  uint8_t storedSlot = EEPROM.read(SLOT_INDEX_ADDR);
+  if (storedSlot == 0xFF) {
+    Serial.print("Type 0xFF detected in slot index address.");
+    Serial.print("Initializing slot index address to be 0.");
+    EEPROM.update(SLOT_INDEX_ADDR, 0);
+  }
+
+  lifetimeGemCount = readLifetimeGemCount();
 
   scheduleNextTap();
 }
@@ -161,13 +189,19 @@ void loop() {
     performTaps(AD_GEMS_MOSFET_GATE_PIN, adGemTaps);
     performTaps(FLOAT_GEMS_MOSFET_GATE_PIN, floatGemTaps);
     lastTapTime = currentTime;
-    gemCount += 5;
+    sessionGemCount += 5;
     activationCount++;
     if (activationCount % 6 == 0) {
-      gemCount += 2;
+      sessionGemCount += 2;
       activationCount = 0;
     }
     scheduleNextTap();
+  }
+
+  if (sessionGemCount >= GEMS_PER_SAVE) {
+    lifetimeGemCount += sessionGemCount;
+    saveGemCount(lifetimeGemCount);
+    sessionGemCount = 0;
   }
 }
 
@@ -181,12 +215,12 @@ void scheduleNextTap() {
   } else {
     nextTapTime = millis() + baseInterval + jitter;
   }
-  Serial.print("millis(): ");
-  Serial.println(millis());
-  Serial.print("baseInterval: ");
-  Serial.println(baseInterval);
-  Serial.print("Next tap in ms: ");
-  Serial.println(nextTapTime - millis());
+  // Serial.print("millis(): ");
+  // Serial.println(millis());
+  // Serial.print("baseInterval: ");
+  // Serial.println(baseInterval);
+  // Serial.print("Next tap in ms: ");
+  // Serial.println(nextTapTime - millis());
 }
 
 void handleOnOffButton() {
@@ -290,7 +324,7 @@ void handleGemResetButton() {
       lastGemResetButtonState = tapGemResetButtonState;
 
       if (tapGemResetButtonState == LOW) {
-        gemCount = 0;
+        sessionGemCount = 0;
         lcd.clear();
         lcd.setCursor(0, 0);
         lcd.print("Gem Count:");
@@ -348,6 +382,9 @@ void updateLcdDisplay() {
 
   // === SLEEP MODE ===
   if (currentLcdMode == SLEEP_MODE) {
+    lcdLightLevel = 0;
+    analogWrite(LCD_LED, lcdLightLevel);
+
     lcd.setCursor(0, 0);
     lcd.print("Sleeping...");
 
@@ -355,7 +392,6 @@ void updateLcdDisplay() {
     lcd.print("Wake at: ");
 
     // Format the time as HH:MM
-    // if (WAKE_UP_HOUR < 10) lcd.print('0');
     lcd.print(WAKE_UP_HOUR);
     lcd.print(':');
     if (WAKE_UP_MINUTE < 10) lcd.print('0');
@@ -369,6 +405,8 @@ void updateLcdDisplay() {
     displayState = (displayState + 1) % numDisplayStates;
     lastDisplayChange = millis();
     lcd.clear();
+    lcdLightLevel = 255;
+    analogWrite(LCD_LED, lcdLightLevel);
   }
 
   lcd.setCursor(0, 0);
@@ -390,8 +428,35 @@ void updateLcdDisplay() {
   }
 
   else if (displayState == 1) {
-    lcd.print("Gems Collected:");
+    lcd.print("Lifetime Gems:  ");
     lcd.setCursor(0, 1);
-    lcd.print(gemCount);
+    lcd.print(lifetimeGemCount);
   }
+}
+
+uint32_t readLifetimeGemCount() {
+  uint16_t lastSlotIndex;
+  EEPROM.get(SLOT_INDEX_ADDR, lastSlotIndex);
+  if (lastSlotIndex >= MAX_GEM_SLOTS) {
+    lastSlotIndex = 0;  // fallback in case of corruption
+  }
+
+  uint16_t readAddress = GEM_SLOTS_START + (lastSlotIndex * BYTES_PER_SLOT);
+  uint32_t savedCount = 0;
+  EEPROM.get(readAddress, savedCount);
+  return savedCount;
+}
+
+void saveGemCount(uint32_t countToSave) {
+  uint16_t lastSlotIndex ;
+  EEPROM.get(SLOT_INDEX_ADDR, lastSlotIndex);
+  if (lastSlotIndex >= MAX_GEM_SLOTS) {
+    lastSlotIndex = 0;  // fallback in case of corruption
+  }
+
+  uint8_t nextSlotIndex = (lastSlotIndex + 1) % MAX_GEM_SLOTS;
+  uint16_t writeAddress = GEM_SLOTS_START + (nextSlotIndex * BYTES_PER_SLOT);
+
+  EEPROM.put(writeAddress, countToSave);
+  EEPROM.put(SLOT_INDEX_ADDR, nextSlotIndex);
 }
