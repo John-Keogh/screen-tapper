@@ -102,15 +102,14 @@ const uint16_t SETTINGS_START = 2;
 const uint16_t SETTINGS_SIZE = 254;
 const uint16_t SLOT_INDEX_ADDR = 0;
 const uint16_t GEM_SLOTS_START = 256;
-const uint8_t BYTES_PER_SLOT = sizeof(uint32_t); // gem counts are stored as uint32_t (4 bytes)
+const uint8_t BYTES_PER_SLOT = 5; // 4 bytes (gem count) + 1 byte (corruption detection) = 5 bytes
 const uint16_t USABLE_EEPROM = EEPROM.length() - GEM_SLOTS_START; // 4096 - 256 = 3840 bytes available for gem data
-const uint16_t MAX_GEM_SLOTS = USABLE_EEPROM / BYTES_PER_SLOT;  // 3840 / 4 = 960 slots
+const uint16_t MAX_GEM_SLOTS = USABLE_EEPROM / BYTES_PER_SLOT;  // 3840 / 5 = 768 slots
 const uint8_t GEMS_PER_SAVE = 25; // min number of gems before updating lifetime EEPROM count
 uint32_t sessionGemCount = 0;
 uint32_t displayedGemCount = 0;
 int activationCount = 0;
 uint32_t lifetimeGemCount = 0; // initialization - will be read from EEPROM later
-// showing 4294967295 at reset?
 
 
 void setup() {
@@ -445,15 +444,56 @@ void updateLcdDisplay() {
 }
 
 uint32_t readLifetimeGemCount() {
+  // retrieve latest slot index
   uint16_t lastSlotIndex;
   EEPROM.get(SLOT_INDEX_ADDR, lastSlotIndex);
+
+  // fallback in case of corruption
   if (lastSlotIndex >= MAX_GEM_SLOTS) {
-    lastSlotIndex = 0;  // fallback in case of corruption
+    lastSlotIndex = 0;
+    uint32_t savedCount = 0;
+    EEPROM.get(GEM_SLOTS_START, savedCount);
+    return savedCount;
   }
 
+  // load last stored gem count
   uint16_t readAddress = GEM_SLOTS_START + (lastSlotIndex * BYTES_PER_SLOT);
   uint32_t savedCount = 0;
   EEPROM.get(readAddress, savedCount);
+
+  // load last stored checksum
+  uint8_t storedChecksum = EEPROM.read(readAddress + BYTES_PER_SLOT - 1);
+
+  // exit early if no checksum detected (only occurs during first use)
+  if (storedChecksum == 0xFF) {
+    return savedCount;
+  }
+
+  // compute checksum based on loaded gem count
+  uint8_t computedChecksum = (savedCount & 0xFF) ^
+                              ((savedCount >> 8) & 0xFF) ^
+                              ((savedCount >> 16) & 0xFF) ^
+                              ((savedCount >> 24) & 0xFF);
+
+  // compare computed checksum with stored checksum to check for corruption
+  if (computedChecksum != storedChecksum) {
+    // fallback: try previous slot (if one exists)
+    if (lastSlotIndex > 0) {
+      uint16_t previousAddress = GEM_SLOTS_START + ((lastSlotIndex - 1) * BYTES_PER_SLOT);
+      uint32_t previousSavedCount = 0;
+      EEPROM.get(previousAddress, previousSavedCount);
+      uint8_t previousChecksum = EEPROM.read(previousAddress + BYTES_PER_SLOT - 1);
+      uint8_t previousComputedChecksum = (previousSavedCount & 0xFF) ^
+                                          ((previousSavedCount >> 8) & 0xFF) ^
+                                          ((previousSavedCount >> 16) & 0xFF) ^
+                                          ((previousSavedCount >> 24) & 0xFF);
+      if (previousChecksum == previousComputedChecksum) {
+        return previousSavedCount; // successful fallback
+      }
+    }
+    return 0; // corruption detected with no valid fallback
+  }
+
   return savedCount;
 }
 
@@ -463,13 +503,36 @@ void saveGemCount(uint32_t countToSave) {
   if (lastSlotIndex >= MAX_GEM_SLOTS) {
     lastSlotIndex = 0;  // fallback in case of corruption
   }
+  uint8_t checksum = (countToSave & 0xFF) ^
+  ((countToSave >> 8) & 0xFF) ^
+  ((countToSave >> 16) & 0xFF) ^
+  ((countToSave >> 24) & 0xFF);
 
   uint8_t nextSlotIndex = (lastSlotIndex + 1) % MAX_GEM_SLOTS;
   uint16_t writeAddress = GEM_SLOTS_START + (nextSlotIndex * BYTES_PER_SLOT);
 
   EEPROM.put(writeAddress, countToSave);
   EEPROM.put(SLOT_INDEX_ADDR, nextSlotIndex);
+  EEPROM.put(SLOT_INDEX_ADDR+4, checksum)
 }
+
+// Steps:
+// Reading
+// 1) Read 4-byte gemCount from EEPROM
+// 2) Read 1-byte checksum
+// 3) If checksum == 0xFF -> treat as uninitialized
+// 3) Else -> compute checksum and compare to stored value
+// 4) If computed checksum == stored checksum -> proceed as normal
+// 4) Else -> corruption detected... do something?
+// Writing
+// 1) Compute checksum from current gemCount
+// 2) Write 4 bytes of gemCount to EEPROM
+// 3) Wrtie 1 byte of checksum to EEPROM
+//
+// Changes:
+// 1) 5 bytes per slot instead of 4
+// Bytes 1-4 stores gemCount
+// Byte 5 stores checksum
 
 void clearGemCountEEPROM() {
   // debug tool function for manually resetting all gem-related EEPROM data
