@@ -36,7 +36,7 @@ int lcdLightLevel = 255;
 
 // ==== Button Logic ====
 bool deviceEnabled = false;
-bool testModeEnabled = true;  // actual device starts as false
+bool testModeEnabled = false;
 
 // Shared debounce delay for all buttons
 const unsigned long debounceDelay = 50;
@@ -62,8 +62,8 @@ unsigned long nextTapTime = 0;
 unsigned long lastTapTime = 0;
 
 // ==== Mode Parameters ====
-const unsigned long baseIntervalActual = 660000;
-const unsigned long jitterRangeActual = 12000;
+const unsigned long baseIntervalActual = 670000;
+const unsigned long jitterRangeActual = 16000;
 const unsigned long pauseBetweenTapsActual = 1000;
 const unsigned long adGemTapsActual = 5;
 const unsigned long floatGemTapsActual = 12;
@@ -144,7 +144,7 @@ void setup() {
     EEPROM.put(SLOT_INDEX_ADDR, (uint16_t)0);
   } else {
     Serial.println("EEPROM already initialized.");
-    // uncomment if manually resetting EEPROM lifetime gem data
+    // // uncomment if manually resetting EEPROM lifetime gem data
     // Serial.println("Resetting EEPROM lifetime gem data.");
     // clearGemCountEEPROM();
     Serial.print("Slot Index Address: ");
@@ -152,6 +152,9 @@ void setup() {
   }
 
   lifetimeGemCount = readLifetimeGemCount();
+  Serial.print("Lifetime Gem Count: ");
+  Serial.println(lifetimeGemCount);
+  Serial.println("");
 
   scheduleNextTap();
 }
@@ -176,7 +179,6 @@ void loop() {
   updateLcdDisplay();
 
   // Use RTC module to check if device is in waking hours
-  // Red LED will light up when in waking hours
   if (rtcAvailable) {
     DateTime now = rtc.now();
     int currentTimeMinutes = now.hour() * 60 + now.minute();
@@ -219,17 +221,20 @@ void scheduleNextTap() {
 
   if (random(12) == 0) {
     // Generate a skip interval between 3 and 8 minutes (in milliseconds)
-    unsigned long randomSkip = random(3 * 60 * 1000, 8 * 60 * 1000);
-    nextTapTime = millis() + baseInterval + randomSkip + jitter;
+    unsigned long randomSkip = random(3UL * 60 * 1000, 8UL * 60 * 1000);
+    
+    unsigned long base = millis() + baseInterval + randomSkip;
+    long adjusted = (long)base + jitter;
+
+    if (adjusted < 0) adjusted = 0;
+
+    nextTapTime = (unsigned long)adjusted;
+
   } else {
-    nextTapTime = millis() + baseInterval + jitter;
+    long adjusted = (long)(millis() + baseInterval) + jitter;
+    if (adjusted < 0) adjusted = 0;
+    nextTapTime = (unsigned long)adjusted;
   }
-  // Serial.print("millis(): ");
-  // Serial.println(millis());
-  // Serial.print("baseInterval: ");
-  // Serial.println(baseInterval);
-  // Serial.print("Next tap in ms: ");
-  // Serial.println(nextTapTime - millis());
 }
 
 void handleOnOffButton() {
@@ -461,6 +466,10 @@ uint32_t readLifetimeGemCount() {
   uint32_t savedCount = 0;
   EEPROM.get(readAddress, savedCount);
 
+  if (savedCount == 0xFFFFFFFF) {
+    return 0; // special case when uninitialized
+  }
+
   // load last stored checksum
   uint8_t storedChecksum = EEPROM.read(readAddress + BYTES_PER_SLOT - 1);
 
@@ -504,40 +513,22 @@ void saveGemCount(uint32_t countToSave) {
     lastSlotIndex = 0;  // fallback in case of corruption
   }
   uint8_t checksum = (countToSave & 0xFF) ^
-  ((countToSave >> 8) & 0xFF) ^
-  ((countToSave >> 16) & 0xFF) ^
-  ((countToSave >> 24) & 0xFF);
+                      ((countToSave >> 8) & 0xFF) ^
+                      ((countToSave >> 16) & 0xFF) ^
+                      ((countToSave >> 24) & 0xFF);
 
   uint8_t nextSlotIndex = (lastSlotIndex + 1) % MAX_GEM_SLOTS;
   uint16_t writeAddress = GEM_SLOTS_START + (nextSlotIndex * BYTES_PER_SLOT);
 
   EEPROM.put(writeAddress, countToSave);
+  EEPROM.put(writeAddress + BYTES_PER_SLOT - 1, checksum);
   EEPROM.put(SLOT_INDEX_ADDR, nextSlotIndex);
-  EEPROM.put(SLOT_INDEX_ADDR+4, checksum)
 }
-
-// Steps:
-// Reading
-// 1) Read 4-byte gemCount from EEPROM
-// 2) Read 1-byte checksum
-// 3) If checksum == 0xFF -> treat as uninitialized
-// 3) Else -> compute checksum and compare to stored value
-// 4) If computed checksum == stored checksum -> proceed as normal
-// 4) Else -> corruption detected... do something?
-// Writing
-// 1) Compute checksum from current gemCount
-// 2) Write 4 bytes of gemCount to EEPROM
-// 3) Wrtie 1 byte of checksum to EEPROM
-//
-// Changes:
-// 1) 5 bytes per slot instead of 4
-// Bytes 1-4 stores gemCount
-// Byte 5 stores checksum
 
 void clearGemCountEEPROM() {
   // debug tool function for manually resetting all gem-related EEPROM data
   for (uint16_t i = GEM_SLOTS_START; i < EEPROM.length(); ++i) {
-    EEPROM.update(i, 0);  // or EEPROM.write(i, 0)
+    EEPROM.update(i, 0xFF);
   }
   EEPROM.put(SLOT_INDEX_ADDR, (uint16_t)0);
 }
