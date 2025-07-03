@@ -91,7 +91,7 @@ unsigned long jitterRange = jitterRangeActual;
 unsigned long pauseBetweenTaps = pauseBetweenTapsActual;
 unsigned long adGemTaps = adGemTapsActual;
 unsigned long floatGemTaps = floatGemTapsActual;
-unsigned long tapDuration = 35;
+unsigned long tapDuration = 50;
 
 // ==== LCD Display Timing ====
 unsigned long lastDisplayChange = 0;
@@ -545,7 +545,6 @@ void updateLcdDisplay() {
     int minutes = (timeLeft / 1000) / 60;
 
     lcd.setCursor(0, 1);
-    if (minutes < 10) lcd.print('0');
     lcd.print(minutes);
     lcd.print(':');
     if (seconds < 10) lcd.print('0');
@@ -555,9 +554,33 @@ void updateLcdDisplay() {
   else if (displayState == 1) {
     lcd.print("Lifetime Gems:  ");
     lcd.setCursor(0, 1);
-    lcd.print(displayedGemCount);
+    char formattedGemCount[20];
+    formatNumberWithCommas(displayedGemCount, formattedGemCount);
+    lcd.print(formattedGemCount);
   }
 }
+
+void formatNumberWithCommas(uint32_t value, char* outBuffer) {
+  char temp[16];  // Temporary buffer for the numeric string
+  sprintf(temp, "%lu", value);  // Convert number to string
+
+  int len = strlen(temp);
+  if (len > 12) return;
+
+  int j = 0;
+
+  for (int i = 0; i < len; ++i) {
+    outBuffer[j++] = temp[i];
+
+    // Insert comma if there are still digits ahead and it's at a 3-digit boundary from the end
+    if (((len - i - 1) % 3 == 0) && (i != len - 1)) {
+      outBuffer[j++] = ',';
+    }
+  }
+
+  outBuffer[j] = '\0';  // Null-terminate the final string
+}
+
 
 uint32_t readLifetimeGemCount() {
   // retrieve latest slot index
