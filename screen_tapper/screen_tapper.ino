@@ -11,8 +11,8 @@ bool deviceAwake = true;
 // ==== Time Settings ====
 const int WAKE_UP_HOUR = 6;
 const int WAKE_UP_MINUTE = 0;
-const int BED_TIME_HOUR = 22;
-const int BED_TIME_MINUTE = 00;
+const int BED_TIME_HOUR = 23;
+const int BED_TIME_MINUTE = 59;
 const int WAKE_UP_TIME = WAKE_UP_HOUR * 60 + WAKE_UP_MINUTE;
 const int BED_TIME = BED_TIME_HOUR * 60 + BED_TIME_MINUTE;
 
@@ -134,9 +134,6 @@ uint32_t lifetimeGemCount = 0; // initialization - will be read from EEPROM late
 void setup() {
   Serial.begin(9600);
 
-  lcd.begin(16, 2);
-  lcd.print("Initializing...");
-
   Wire.begin();
   rtcAvailable = rtc.begin();
 
@@ -150,6 +147,10 @@ void setup() {
   pinMode(LCD_LED, OUTPUT);
   analogWrite(LCD_LED, 255); // 0 is always off; 255 is always on
   randomSeed(analogRead(0));
+
+  lcd.begin(16, 2);
+  lcd.print("Initializing...");
+  delay(1000);
 
   // Initialization for lifetime gem count - only for first time use
   uint16_t storedSlot;
@@ -182,6 +183,11 @@ void loop() {
   handleTapDurationDownButton();
   handleOverrideClockButton();
 
+  // Check if device is in waking hours
+  if (rtcAvailable && !overrideClock) {
+    checkRTC();
+  }
+
   if (!deviceEnabled) {
     currentLcdMode = OFF_MODE;
     updateLcdDisplay();
@@ -195,11 +201,6 @@ void loop() {
   }
 
   updateLcdDisplay();
-
-  // Check if device is in waking hours
-  if (rtcAvailable && !overrideClock) {
-    checkRTC();
-  }
 
   updateTapSequence();
   
@@ -275,8 +276,8 @@ void updateTapSequence() {
 
   if (!solenoidOn && now - tapPhaseStart >= pauseBetweenTaps) {
     // Turn solenoid on
-    Serial.print("Solenoid: ");
-    Serial.println(tappingPin);
+    // Serial.print("Solenoid: ");
+    // Serial.println(tappingPin);
     digitalWrite(tappingPin, HIGH);
     solenoidOn = true;
     tapPhaseStart = now;
@@ -545,6 +546,7 @@ void updateLcdDisplay() {
     int minutes = (timeLeft / 1000) / 60;
 
     lcd.setCursor(0, 1);
+    if (minutes < 10) lcd.print('0');
     lcd.print(minutes);
     lcd.print(':');
     if (seconds < 10) lcd.print('0');
