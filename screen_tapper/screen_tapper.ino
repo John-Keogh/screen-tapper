@@ -7,12 +7,13 @@
 RTC_DS1307 rtc;
 bool rtcAvailable = false;
 bool deviceAwake = true;
+bool previousDeviceAwake = true;
 
 // ==== Time Settings ====
-const int WAKE_UP_HOUR = 6;
-const int WAKE_UP_MINUTE = 0;
+const int WAKE_UP_HOUR = 5;
+const int WAKE_UP_MINUTE = 50;
 const int BED_TIME_HOUR = 23;
-const int BED_TIME_MINUTE = 59;
+const int BED_TIME_MINUTE = 0;
 const int WAKE_UP_TIME = WAKE_UP_HOUR * 60 + WAKE_UP_MINUTE;
 const int BED_TIME = BED_TIME_HOUR * 60 + BED_TIME_MINUTE;
 
@@ -91,7 +92,7 @@ unsigned long jitterRange = jitterRangeActual;
 unsigned long pauseBetweenTaps = pauseBetweenTapsActual;
 unsigned long adGemTaps = adGemTapsActual;
 unsigned long floatGemTaps = floatGemTapsActual;
-unsigned long tapDuration = 50;
+unsigned long tapDuration = 10;
 
 // ==== LCD Display Timing ====
 unsigned long lastDisplayChange = 0;
@@ -231,11 +232,20 @@ void checkRTC() {
   DateTime now = rtc.now();
   int currentTimeMinutes = now.hour() * 60 + now.minute();
 
+  bool currentAwake;
+
   if (WAKE_UP_TIME < BED_TIME) {
-    deviceAwake = (currentTimeMinutes >= WAKE_UP_TIME && currentTimeMinutes < BED_TIME);
+    currentAwake = (currentTimeMinutes >= WAKE_UP_TIME && currentTimeMinutes < BED_TIME);
   } else {
-    deviceAwake = (currentTimeMinutes >= WAKE_UP_TIME || currentTimeMinutes < BED_TIME);
+    currentAwake = (currentTimeMinutes >= WAKE_UP_TIME || currentTimeMinutes < BED_TIME);
   }
+
+  if (!previousDeviceAwake && currentAwake) {
+    scheduleNextTap();
+  }
+
+  deviceAwake = currentAwake;
+  previousDeviceAwake = currentAwake;
 }
 
 void scheduleNextTap() {
