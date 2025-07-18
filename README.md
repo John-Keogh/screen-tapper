@@ -6,7 +6,7 @@ Overall, this project can be broken up into several main components: the electro
 
 ## Electronic Hardware
 
-The brains of this device started out on an Arduino Uno R3, but I have since upgraded to an Arduino Mega 2560 for the additional space and I/O support. The power comes from a 5V 6A DC wall plug that interfaces with a barrel jack adapter. Interaction with the mobile device is carried out by two 5V solenoid valves that are controlled using one MOSFET each. A Real Time Clock (RTC) module provides time-keeping, and a series of buttons allow for limited manual control. An LCD screen provides additional external information. The RTC, MOSFETs, buttons, etc. are all connected using a couple of breadboards.
+The brains of this device started out on an Arduino Uno R3, but I have since upgraded to an Arduino Mega 2560 for the additional space and I/O support. The power comes from a USB wall adapter through the USB-B port. Interaction with the mobile device is carried out by two 5V solenoid valves that are controlled using one MOSFET each. A Real Time Clock (RTC) module provides time-keeping, and a series of buttons allow for limited manual control. An LCD screen provides additional external information. The RTC, MOSFETs, buttons, etc. are all connected using a couple of breadboards.
 
 ## Software
 
@@ -14,18 +14,18 @@ The software for the arduino is contained in a single .ino file. The RTC is used
 
 ## Mechanical housing
 
-The current housing for the device is made entirely from cardboard, ductape, and a few zip ties.
+The housing has been upgraded using 3d-printed components that securely hold the device and the solenoids.
 
 ## Future Plans
 
 ### Electronic Hardware
 
-While I've upgraded from jumper cables to custom lines of #22 solid core wire (which made a surprisingly big improvement in overall quality of life when working with this thing), I eventually want to learn how to design a single, custom PCB to power the device. As a mechanical engineer who always avoided the electronics lab, I'm expecting this to be the most challenging part of the project. My vision is to have a single board that everything is soldered to and has sufficient customization via on-board controls (buttons/switches) that never needs to be plugged into a computer again after the software is initially installed. One nice-to-have feature I'd like to add eventually is the ability to log all actions onto an SD or micro SD card for future analysis to assess the device's performance. Another nice-to-have feature would be the ability to completely shut off the LCD display.
+While I've upgraded from jumper cables to custom lines of #22 solid core wire (which made a surprisingly big improvement in overall quality of life when working with this thing), I eventually want to learn how to design a single, custom PCB to power the device. As a mechanical engineer who always avoided the electronics lab, I'm expecting this to be the most challenging part of the project. My vision is to have a single board that everything is soldered to and has sufficient customization via on-board controls (buttons/switches) that never needs to be plugged into a computer again after the software is initially installed. One nice-to-have feature I'd like to add eventually is the ability to log all actions onto an SD or micro SD card for future analysis to assess the device's performance.
 
 ### Software
 
-The software is currently functional, but I want to add functionality to support more manual control via the buttons/switches in the device. Specifically, I want to be able to tune the tap duration of the solenoids. I'd also like to be able to turn the individual solenoids on and off manually and individually. I'd like to be able to override the bedtime. Depending on the complexity of manual inputs available, I may need to update the LCD output to make it easier to tell what settings are active.
+I'd like to swap the buttons for a single rotary encoder that allows me to scroll through a menu of options. This will simplify the hardware and allow for future features. A bigger LCD display would be an upgrade for a menu-based system.
 
 ### Mechanical Housing
 
-Possibly the biggest quality of life improvement for this project would be an upgraded housing for the device. While charming, the current duct tape and cardboard design is clunky and flimsy. I'd eventually like to 3D print a sleek enclosure. The current plan is to print a version 1.0 to accommodate the electronic hardware I'm using currently. Then, if I'm able to successfully design a custom PCB, I could revise the design and release a final version 2.0 with seamless integration of the custom PCB, including button/switch mounts on the exterior of the housing, a flush cutout for the LCD, and an easily reachable and secure barrel jack plug for the power supply.
+The current printed housing does its job, but it leaves a lot to be desired. I'd like to make the entire thing more compact and elegant. Depending on the size of the final electronics, I'd like to make the design portable using an external battery pack so I can keep it running while travelling.
