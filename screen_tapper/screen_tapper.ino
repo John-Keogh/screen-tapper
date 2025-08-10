@@ -1,7 +1,9 @@
-#include <LiquidCrystal.h>
 #include <Wire.h>
 #include <RTClib.h>
 #include <EEPROM.h>
+#include "ui.h"
+#include "time_settings.h"
+#include "config_pins.h"
 
 // ==== RTC ====
 RTC_DS1307 rtc;
@@ -9,31 +11,20 @@ bool rtcAvailable = false;
 bool deviceAwake = true;
 bool previousDeviceAwake = true;
 
-// ==== Time Settings ====
-const int WAKE_UP_HOUR = 5;
-const int WAKE_UP_MINUTE = 50;
-const int BED_TIME_HOUR = 23;
-const int BED_TIME_MINUTE = 0;
-const int WAKE_UP_TIME = WAKE_UP_HOUR * 60 + WAKE_UP_MINUTE;
-const int BED_TIME = BED_TIME_HOUR * 60 + BED_TIME_MINUTE;
-
-// ==== Pins ====
-const int AD_GEMS_MOSFET_GATE_PIN = 26;
-const int FLOAT_GEMS_MOSFET_GATE_PIN = 22;
-const int ONOFF_BUTTON_PIN = 37;
-const int MODE_TOGGLE_PIN = 39;
-const int TAP_DURATION_UP = 41;
-const int TAP_DURATION_DOWN = 43;
-const int OVERRIDE_CLOCK_BUTTON = 45;
-const int LCD_LED = 2;
 
 // ==== LCD ====
-LiquidCrystal lcd(29, 28, 31, 30, 33, 32);
-enum LcdMode { OFF_MODE, SLEEP_MODE, ACTIVE_MODE };
-LcdMode currentLcdMode = OFF_MODE;
-LcdMode lastLcdMode = ACTIVE_MODE;  // force update on first run
-bool lcdEnabled = true;
-int lcdLightLevel = 255;
+UIMode currentLcdMode = UIMode::OFF_MODE;
+UIMode lastLcdMode = UIMode::ACTIVE_MODE;
+unsigned long lastDisplayChange = 0;
+const unsigned long displayInterval = 2500;
+int displayState = 0;
+const int numDisplayStates = 2;
+
+// ==== Test Mode Message ====
+bool showTestModeMessage = false;
+String testModeMessage = "";
+unsigned long testModeMessageStart = 0;
+const unsigned long testModeMessageDuration = 1500;
 
 // ==== Button Logic ====
 bool deviceEnabled = true;
@@ -75,17 +66,7 @@ int tappingPin = 0;
 int totalTaps = 0;
 
 // ==== Mode Parameters ====
-const unsigned long baseIntervalActual = 670000;
-const unsigned long jitterRangeActual = 16000;
-const unsigned long pauseBetweenTapsActual = 1250;
-const unsigned long adGemTapsActual = 7;
-const unsigned long floatGemTapsActual = 10;
-
-const unsigned long baseIntervalTest = 13000;
-const unsigned long jitterRangeTest = 0;
-const unsigned long pauseBetweenTapsTest = 1000;
-const unsigned long adGemTapsTest = 3;
-const unsigned long floatGemTapsTest = 3;
+#include "mode_params.h"
 
 unsigned long baseInterval = baseIntervalActual;
 unsigned long jitterRange = jitterRangeActual;
@@ -94,17 +75,7 @@ unsigned long adGemTaps = adGemTapsActual;
 unsigned long floatGemTaps = floatGemTapsActual;
 unsigned long tapDuration = 10;
 
-// ==== LCD Display Timing ====
-unsigned long lastDisplayChange = 0;
-const unsigned long displayInterval = 3000;
-int displayState = 0;
-const int numDisplayStates = 2;
 
-// ==== Test Mode Message ====
-bool showTestModeMessage = false;
-String testModeMessage = "";
-unsigned long testModeMessageStart = 0;
-const unsigned long testModeMessageDuration = 1500;
 
 // ==== Override Clock Message ====
 bool showOverrideClockMessage = false;
@@ -134,23 +105,23 @@ uint32_t lifetimeGemCount = 0; // initialization - will be read from EEPROM late
 
 void setup() {
   Serial.begin(9600);
+  randomSeed(analogRead(0));
 
   Wire.begin();
   rtcAvailable = rtc.begin();
 
-  pinMode(AD_GEMS_MOSFET_GATE_PIN, OUTPUT);
-  pinMode(FLOAT_GEMS_MOSFET_GATE_PIN, OUTPUT);
-  pinMode(ONOFF_BUTTON_PIN, INPUT);
-  pinMode(MODE_TOGGLE_PIN, INPUT);
-  pinMode(TAP_DURATION_UP, INPUT);
-  pinMode(TAP_DURATION_DOWN, INPUT);
-  pinMode(OVERRIDE_CLOCK_BUTTON, INPUT);
-  pinMode(LCD_LED, OUTPUT);
-  analogWrite(LCD_LED, 255); // 0 is always off; 255 is always on
-  randomSeed(analogRead(0));
+  pinMode(ONOFF_BUTTON_PIN,             INPUT);
+  pinMode(MODE_TOGGLE_PIN,              INPUT);
+  pinMode(TAP_DURATION_UP,              INPUT);
+  pinMode(TAP_DURATION_DOWN,            INPUT);
+  pinMode(OVERRIDE_CLOCK_BUTTON,        INPUT);
+  pinMode(AD_GEMS_MOSFET_GATE_PIN,      OUTPUT);
+  pinMode(FLOAT_GEMS_MOSFET_GATE_PIN,   OUTPUT);
+  pinMode(LCD_LED,                      OUTPUT);
 
-  lcd.begin(16, 2);
-  lcd.print("Initializing...");
+  ui_begin();
+  ui_setMode(UIMode::ACTIVE_MODE);
+  
   delay(1000);
 
   // Initialization for lifetime gem count - only for first time use
@@ -190,15 +161,16 @@ void loop() {
   }
 
   if (!deviceEnabled) {
-    currentLcdMode = OFF_MODE;
-    updateLcdDisplay();
+    currentLcdMode = UIMode::OFF_MODE;
+    ui_setMode(currentLcdMode);
     return;
   } else if (!deviceAwake && !overrideClock) {
-    currentLcdMode = SLEEP_MODE;
-    updateLcdDisplay();
+    currentLcdMode = UIMode::SLEEP_MODE;
+    ui_setMode(currentLcdMode);
     return;
   } else {
-    currentLcdMode = ACTIVE_MODE;
+    currentLcdMode = UIMode::ACTIVE_MODE;
+    ui_setMode(currentLcdMode);
   }
 
   updateLcdDisplay();
@@ -276,7 +248,7 @@ void startTapSequence(int mosfetPin, int numTaps) {
   tapPhaseStart = millis();
   tappingPin = mosfetPin;
   totalTaps = numTaps;
-  lcd.clear();
+  // ui_clear();
 }
 
 void updateTapSequence() {
@@ -374,11 +346,7 @@ void handleTapDurationUpButton() {
 
       if (tapDurationUpButtonState == LOW) {
         tapDuration++;
-        lcd.clear();
-        lcd.setCursor(0, 0);
-        lcd.print("Tap Duration:");
-        lcd.setCursor(0, 1);
-        lcd.print(tapDuration);
+        ui_showTapDuration(tapDuration);
 
         // Start the message timer
         tapDurationUpMessageStart = millis();
@@ -397,11 +365,7 @@ void handleTapDurationDownButton() {
 
       if (tapDurationDownButtonState == LOW) {
         tapDuration--;
-        lcd.clear();
-        lcd.setCursor(0, 0);
-        lcd.print("Tap Duration:");
-        lcd.setCursor(0, 1);
-        lcd.print(tapDuration);
+        ui_showTapDuration(tapDuration);
 
         // Start the message timer
         tapDurationDownMessageStart = millis();
@@ -427,7 +391,7 @@ void handleOverrideClockButton() {
         } else {
           overrideClockMessageTop = "Override        ";
           overrideClockMessageBottom = "Clock: Active   ";
-          analogWrite(LCD_LED, 255);
+          ui_setBacklight(255);
         }
         showOverrideClockMessage = true;
         overrideClockMessageStart = millis();      }
@@ -439,48 +403,39 @@ void updateLcdDisplay() {
   // === TEST MODE ===
   if (showTestModeMessage) {
     if (millis() - testModeMessageStart <= testModeMessageDuration) {
-      lcd.setCursor(0, 0);
-      lcd.print(testModeMessage);
-      lcd.setCursor(0, 1);
-      lcd.print("                ");
+      ui_showTestMode(testModeEnabled);
       return;
     } else {
       showTestModeMessage = false;
-      lcd.clear();
+      // ui_clear();
     }
   }
 
   // === OVERRIDE CLOCK ===
   if (showOverrideClockMessage) {
     if (millis() - overrideClockMessageStart <= overrideClockMessageDuration) {
-      lcd.setCursor(0, 0);
-      lcd.print(overrideClockMessageTop);
-      lcd.setCursor(0, 1);
-      lcd.print(overrideClockMessageBottom);
+      ui_showOverride(overrideClock);
       return;
     } else {
       showOverrideClockMessage = false;
-      lcd.clear();
+      // ui_clear();
     }
   }
 
   // Only update the screen when mode changes or when ACTIVE_MODE is rotating
   if (currentLcdMode != lastLcdMode) {
-    lcd.clear();
+    // ui_clear();
     lastDisplayChange = millis();  // reset the interval timer
   }
 
   // === TAP DURATION UP ===
   if (tapDurationUpMessageActive) {
     if (millis() - tapDurationUpMessageStart >= 1000) {
-      lcd.clear();
+      // ui_clear();
       tapDurationUpMessageActive = false;
       lastDisplayChange = millis();
     } else {
-      lcd.setCursor(0, 0);
-      lcd.print("Tap Duration:");
-      lcd.setCursor(0, 1);
-      lcd.print(tapDuration);
+      ui_showTapDuration(tapDuration);
       return;
     }
   }
@@ -488,51 +443,33 @@ void updateLcdDisplay() {
   // === TAP DURATION DOWN ===
   if (tapDurationDownMessageActive) {
     if (millis() - tapDurationDownMessageStart >= 1000) {
-      lcd.clear();
+      // ui_clear();
       tapDurationDownMessageActive = false;
       lastDisplayChange = millis();
     } else {
-      lcd.setCursor(0, 0);
-      lcd.print("Tap Duration:");
-      lcd.setCursor(0, 1);
-      lcd.print(tapDuration);
+      ui_showTapDuration(tapDuration);
       return;
     }
   }
 
   // === ACTIVELY TAPPING ===
   if (tappingActive) {
-    lcd.setCursor(0, 0);
-    lcd.print("Tapping...");
+    ui_showTapping();
     return;
   }
 
   lastLcdMode = currentLcdMode;
 
   // === OFF MODE ===
-  if (currentLcdMode == OFF_MODE) {
-    lcd.setCursor(0, 0);
-    lcd.print("Device is off.");
+  if (currentLcdMode == UIMode::OFF_MODE) {
+    ui_showOff();
     return;
   }
 
   // === SLEEP MODE ===
-  if (currentLcdMode == SLEEP_MODE) {
-    lcdLightLevel = 0;
-    analogWrite(LCD_LED, lcdLightLevel);
-
-    lcd.setCursor(0, 0);
-    lcd.print("Sleeping...");
-
-    lcd.setCursor(0, 1);
-    lcd.print("Wake at: ");
-
-    // Format the time as HH:MM
-    lcd.print(WAKE_UP_HOUR);
-    lcd.print(':');
-    if (WAKE_UP_MINUTE < 10) lcd.print('0');
-    lcd.print(WAKE_UP_MINUTE);
-
+  if (currentLcdMode == UIMode::SLEEP_MODE) {
+    ui_setBacklight(0);
+    ui_showSleep(WAKE_UP_HOUR, WAKE_UP_MINUTE);
     return;
   }
 
@@ -540,35 +477,16 @@ void updateLcdDisplay() {
   if (millis() - lastDisplayChange >= displayInterval) {
     displayState = (displayState + 1) % numDisplayStates;
     lastDisplayChange = millis();
-    lcd.clear();
-    lcdLightLevel = 255;
-    analogWrite(LCD_LED, lcdLightLevel);
+    // ui_clear();
+    ui_setBacklight(255);
   }
-
-  lcd.setCursor(0, 0);
 
   if (displayState == 0) {
-    lcd.print("Next tap in:    ");
-
     unsigned long now = millis();
     unsigned long timeLeft = (nextTapTime > now) ? (nextTapTime - now) : 0;
-    int seconds = (timeLeft / 1000) % 60;
-    int minutes = (timeLeft / 1000) / 60;
-
-    lcd.setCursor(0, 1);
-    if (minutes < 10) lcd.print('0');
-    lcd.print(minutes);
-    lcd.print(':');
-    if (seconds < 10) lcd.print('0');
-    lcd.print(seconds);
-  }
-
-  else if (displayState == 1) {
-    lcd.print("Lifetime Gems:  ");
-    lcd.setCursor(0, 1);
-    char formattedGemCount[20];
-    formatNumberWithCommas(displayedGemCount, formattedGemCount);
-    lcd.print(formattedGemCount);
+    ui_showNextTapCountdown(timeLeft);
+  } else if (displayState == 1) {
+    ui_showLifetimeGems(displayedGemCount);
   }
 }
 
