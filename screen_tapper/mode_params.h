@@ -4,13 +4,13 @@
 // replace with a structure
 const unsigned long baseIntervalActual = 670000;
 const unsigned long jitterRangeActual = 16000;
-const unsigned long pauseBetweenTapsActual = 1250;
+const uint16_t pauseBetweenTapsActual = 1250;
 const unsigned long adGemTapsActual = 7;
 const unsigned long floatGemTapsActual = 10;
 
 const unsigned long baseIntervalTest = 13000;
 const unsigned long jitterRangeTest = 0;
-const unsigned long pauseBetweenTapsTest = 1000;
+const uint16_t pauseBetweenTapsTest = 1000;
 const unsigned long adGemTapsTest = 3;
 const unsigned long floatGemTapsTest = 3;
 

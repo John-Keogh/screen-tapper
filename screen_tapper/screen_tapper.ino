@@ -6,14 +6,13 @@
 #include "config_pins.h"
 #include "input.h"
 #include "clock.h"
+#include "tapper.h"
 
 uint16_t tapDuration = 13;
 SleepSchedule sched;
 
 
 // ==== LCD ====
-UIMode currentLcdMode = UIMode::OFF_MODE;
-UIMode lastLcdMode = UIMode::ACTIVE_MODE;
 unsigned long lastDisplayChange = 0;
 const unsigned long displayInterval = 2500;
 int displayState = 0;
@@ -78,11 +77,9 @@ void setup() {
   randomSeed(analogRead(0));
 
   clock_begin();
-  bool rtcAvailable = clock_available();
-  
+  bool rtcAvailable = clock_available(); // this isn't used for anything?
 
-  pinMode(AD_GEMS_MOSFET_GATE_PIN,      OUTPUT);
-  pinMode(FLOAT_GEMS_MOSFET_GATE_PIN,   OUTPUT);
+  tapper_begin(AD_GEMS_MOSFET_GATE_PIN, FLOAT_GEMS_MOSFET_GATE_PIN);
 
   ui_begin();
   ui_setMode(UIMode::ACTIVE_MODE);
@@ -118,26 +115,26 @@ void setup() {
 void loop() {
   unsigned long now = millis();
 
-  updateTapSequence(now);
+  tapper_update(now);
 
-  if (!tappingActive && deviceEnabled) {
-    if (!clock_isAwake(sched) || overrideClock) {
-      if (now >= nextTapTime) {
-        Serial.println();
-        Serial.println("Starting tap sequence.");
-        startTapSequence(AD_GEMS_MOSFET_GATE_PIN, adGemTaps);
-        lastTapTime = now;
+  bool awake = overrideClock || clock_isAwake(sched);
+  if (!tapper_isActive() && deviceEnabled && awake && now >= nextTapTime) {
+    tapper_startCycle(
+      adGemTaps,
+      floatGemTaps,
+      tapDuration,
+      pauseBetweenTaps,
+      now
+    );
 
-        // Gem bookkeeping that accompanies a start
-        sessionGemCount += 5;
-        activationCount++;
-        if (activationCount % 6 == 0) {
-          sessionGemCount += 2;
-          activationCount = 0;
-        }
-        scheduleNextTap();  // schedule the following activation
-      }
+    sessionGemCount += 5;
+    activationCount++;
+    if (activationCount % 6 == 0) {
+      sessionGemCount += 2;
+      activationCount = 0;
     }
+
+    scheduleNextTap();
   }
 
   InputEvents events = input_poll();
@@ -197,34 +194,36 @@ void loop() {
     return;
   }
 
+  // Emergency stop
   if (!deviceEnabled) {
-    currentLcdMode = UIMode::OFF_MODE;
-    ui_setMode(currentLcdMode);
+    tapper_stop();
+  }
+
+  if (!deviceEnabled) {
+    ui_setMode(UIMode::OFF_MODE);
     ui_showOff();
     return;
   }
 
-  if (!clock_isAwake(sched) && !overrideClock) {
-    currentLcdMode = UIMode::SLEEP_MODE;
-    ui_setMode(currentLcdMode);
+  if (!overrideClock && !awake) {
+    ui_setMode(UIMode::SLEEP_MODE);
     ui_setBacklight(0);
     ui_showSleep(sched.wakeHour, sched.wakeMinute);
     return;
   }
 
-  currentLcdMode = UIMode::ACTIVE_MODE;
-  ui_setMode(currentLcdMode);
+  ui_setMode(UIMode::ACTIVE_MODE);
   ui_setBacklight(255);
+
+  if (tapper_isActive()) {
+    ui_showTapping();
+    return;
+  }
 
   // Rotating “idle” screens (countdown / lifetime gems)
   if (now - lastDisplayChange >= displayInterval) {
     displayState = (displayState + 1) % numDisplayStates;
     lastDisplayChange = now;
-  }
-
-  if (tappingActive) {
-    ui_showTapping();
-    return;
   }
 
   if (displayState == 0) {
