@@ -3,3 +3,4 @@
 // In .ino: replace the inline state machine with simple calls like “start sequence” and “update sequence”.
 
 // Compile/test: verify the solenoids operate the same.
+

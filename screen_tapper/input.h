@@ -1,5 +1,13 @@
-// Move: all button reading and debouncing logic here (on/off, test mode, tap up/down, override). If you’ve added the rotary encoder, you can put the rotation/click reading here too.
+#pragma once
+#include <stdint.h>
 
-// In .ino: remove direct digitalRead() for buttons; instead, call a single function (declared in input.h) that returns “events” (e.g., onOffPressed, testModePressed, etc.).
+struct InputEvents {
+  bool onOffPressed     = false;
+  bool testModePressed  = false;
+  bool tapUpPressed     = false;
+  bool tapDownPressed   = false;
+  bool overridePressed  = false;
+};
 
-// Compile/test: press buttons and verify the same behavior as before.
+void input_begin();
+InputEvents input_poll();
