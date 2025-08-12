@@ -14,4 +14,8 @@ void ui_showOff();
 void ui_showSleep(uint8_t hh, uint8_t mm);
 void ui_showNextTapCountdown(uint32_t msLeft);
 void ui_showLifetimeGems(uint32_t gems);
-void ui_clear();
+
+void ui_showOverlay(const char* line1, const char* line2, uint16_t durationMs, uint8_t priority = 0);
+bool ui_overlayActive();  // true while overlay owns screen
+void ui_tick(); // handles overlay auto-expiration
+void ui_resetTappingScreen();

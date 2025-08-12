@@ -59,6 +59,7 @@ static uint8_t targetTapsForStage() {
 }
 
 bool tapper_update(uint32_t nowMs) {
+  // drives the active tapping sequence
   if (!s_active) return false;
 
   if (!s_solenoidOn) {

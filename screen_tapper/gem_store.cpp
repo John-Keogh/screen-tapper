@@ -100,7 +100,6 @@ uint32_t gem_store_read_lifetime() {
   return 0;
 }
 
-
 void gem_store_write_lifetime(uint32_t lifetime) {
   uint16_t m = max_slots();
   if (m == 0) return;

@@ -11,8 +11,9 @@
 #include "gem_store.h"
 
 uint16_t tapDuration = 13;
-SleepSchedule sched;
 
+// ==== Clock ====
+SleepSchedule sched;
 
 // ==== LCD ====
 unsigned long lastDisplayChange = 0;
@@ -21,12 +22,8 @@ int displayState = 0;
 const int numDisplayStates = 2;
 
 // ==== Button Logic ====
-bool deviceEnabled = true;
+bool deviceEnabled = false; // device should be on to begin with (opposite this value for some reason)
 bool testModeEnabled = false;
-bool tapDurationUpMessageActive = false;
-unsigned long tapDurationUpMessageStart = 0;
-bool tapDurationDownMessageActive = false;
-unsigned long tapDurationDownMessageStart = 0;
 bool overrideClock = false;
 
 // ==== Solenoids ====
@@ -41,11 +38,11 @@ int tappingPin = 0;
 int totalTaps = 0;
 
 // ==== Mode Parameters ====
-unsigned long baseInterval = baseIntervalActual;
-unsigned long jitterRange = jitterRangeActual;
-unsigned long pauseBetweenTaps = pauseBetweenTapsActual;
-unsigned long adGemTaps = adGemTapsActual;
-unsigned long floatGemTaps = floatGemTapsActual;
+uint32_t baseInterval = baseIntervalActual;
+uint32_t jitterRange = jitterRangeActual;
+uint32_t pauseBetweenTaps = pauseBetweenTapsActual;
+uint8_t adGemTaps = adGemTapsActual;
+uint8_t floatGemTaps = floatGemTapsActual;
 
 // ==== Override Clock Message ====
 bool showOverrideClockMessage = false;
@@ -88,10 +85,17 @@ void setup() {
 void loop() {
   unsigned long now = millis();
 
+  static bool wasAwake = false;
+  bool awake = overrideClock || clock_isAwake(sched);
+
+  if (awake && !wasAwake) {
+    scheduleNextTap();
+  }
+  wasAwake = awake;
+
   tapper_update(now);
 
-  bool awake = overrideClock || clock_isAwake(sched);
-  if (!tapper_isActive() && deviceEnabled && awake && now >= nextTapTime) {
+  if (!tapper_isActive() && deviceEnabled && awake && (int32_t)(now - nextTapTime) >= 0) {
     tapper_startCycle(
       adGemTaps,
       floatGemTaps,
@@ -109,6 +113,14 @@ void loop() {
 
     scheduleNextTap();
   }
+
+  static bool wasTapping = false;
+  bool isTapping = tapper_isActive();
+
+  if (!isTapping && wasTapping) {
+    ui_resetTappingScreen();
+  }
+  wasTapping = isTapping;
 
   InputEvents events = input_poll();
 
@@ -145,8 +157,6 @@ void loop() {
   if (events.tapUpPressed) {
     tapDuration++;
     ui_showTapDuration(tapDuration);
-    tapDurationUpMessageActive = true;
-    tapDurationUpMessageStart = now;
     return;
   }
 
@@ -154,8 +164,6 @@ void loop() {
   if (events.tapDownPressed) {
     if (tapDuration > 1) tapDuration--;
     ui_showTapDuration(tapDuration);
-    tapDurationDownMessageActive = true;
-    tapDurationDownMessageStart = now;
     return;
   }
 
@@ -193,6 +201,9 @@ void loop() {
     return;
   }
 
+  ui_tick();
+  if (ui_overlayActive()) return;
+
   // Rotating “idle” screens (countdown / lifetime gems)
   if (now - lastDisplayChange >= displayInterval) {
     displayState = (displayState + 1) % numDisplayStates;
@@ -200,7 +211,9 @@ void loop() {
   }
 
   if (displayState == 0) {
-    unsigned long timeLeft = (nextTapTime > now) ? (nextTapTime - now) : 0;
+    uint32_t timeLeft = 0;
+    int32_t dt = (int32_t)(nextTapTime - now);
+    if (dt > 0) timeLeft = (uint32_t) dt;
     ui_showNextTapCountdown(timeLeft);
   } else {
     displayedGemCount = lifetimeGemCount + sessionGemCount;
@@ -209,7 +222,6 @@ void loop() {
 
   if (sessionGemCount >= GEMS_PER_SAVE) {
     lifetimeGemCount += sessionGemCount;
-    // saveGemCount(lifetimeGemCount);
     gem_store_write_lifetime(lifetimeGemCount);
     sessionGemCount = 0;
   }

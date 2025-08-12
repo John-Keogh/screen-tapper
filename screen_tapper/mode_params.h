@@ -2,17 +2,17 @@
 #include <stdint.h>
 
 // replace with a structure
-const unsigned long baseIntervalActual = 670000;
-const unsigned long jitterRangeActual = 16000;
-const uint16_t pauseBetweenTapsActual = 1250;
-const unsigned long adGemTapsActual = 7;
-const unsigned long floatGemTapsActual = 10;
+const uint32_t baseIntervalActual       = 670000;
+const uint32_t jitterRangeActual        = 16000;
+const uint32_t pauseBetweenTapsActual   = 1250;
+const uint8_t adGemTapsActual           = 7;
+const uint8_t floatGemTapsActual        = 10;
 
-const unsigned long baseIntervalTest = 13000;
-const unsigned long jitterRangeTest = 0;
-const uint16_t pauseBetweenTapsTest = 1000;
-const unsigned long adGemTapsTest = 3;
-const unsigned long floatGemTapsTest = 3;
+const uint32_t baseIntervalTest         = 13000;
+const uint32_t jitterRangeTest          = 0;
+const uint32_t pauseBetweenTapsTest     = 1000;
+const uint8_t adGemTapsTest             = 3;
+const uint8_t floatGemTapsTest          = 3;
 
 // struct ModeParams {
 //   uint32_t baseInterval;
