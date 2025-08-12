@@ -4,9 +4,11 @@
 #include "ui.h"
 #include "time_settings.h"
 #include "config_pins.h"
+#include "mode_params.h"
 #include "input.h"
 #include "clock.h"
 #include "tapper.h"
+#include "gem_store.h"
 
 uint16_t tapDuration = 13;
 SleepSchedule sched;
@@ -39,33 +41,17 @@ int tappingPin = 0;
 int totalTaps = 0;
 
 // ==== Mode Parameters ====
-#include "mode_params.h"
-
 unsigned long baseInterval = baseIntervalActual;
 unsigned long jitterRange = jitterRangeActual;
 unsigned long pauseBetweenTaps = pauseBetweenTapsActual;
 unsigned long adGemTaps = adGemTapsActual;
 unsigned long floatGemTaps = floatGemTapsActual;
 
-
-
 // ==== Override Clock Message ====
 bool showOverrideClockMessage = false;
 unsigned long overrideClockMessageStart = 0;
 
 // ==== Gem Tracking (EEPROM) ====
-// EEPROM layout:
-//  - 0–1: uint16_t slot index (last used slot)
-//  - 2–255: reserved for future settings/data
-//  - 256–4095: gem count history (each 4 bytes)
-const uint16_t SETTINGS_START = 2;
-const uint16_t SETTINGS_SIZE = 254;
-const uint16_t SLOT_INDEX_ADDR = 0;
-const uint16_t GEM_SLOTS_START = 256;
-const uint8_t BYTES_PER_SLOT = 5; // 4 bytes (gem count) + 1 byte (corruption detection) = 5 bytes
-const uint16_t USABLE_EEPROM = EEPROM.length() - GEM_SLOTS_START; // 4096 - 256 = 3840 bytes available for gem data
-const uint16_t MAX_GEM_SLOTS = USABLE_EEPROM / BYTES_PER_SLOT;  // 3840 / 5 = 768 slots
-const uint8_t GEMS_PER_SAVE = 25; // min number of gems before updating lifetime EEPROM count
 uint32_t sessionGemCount = 0;
 uint32_t displayedGemCount = 0;
 int activationCount = 0;
@@ -85,25 +71,12 @@ void setup() {
   ui_setMode(UIMode::ACTIVE_MODE);
 
   input_begin();
+
+  gem_store_begin();
+  lifetimeGemCount = gem_store_read_lifetime();
   
   delay(1000);
 
-  // Initialization for lifetime gem count - only for first time use
-  uint16_t storedSlot;
-  EEPROM.get(SLOT_INDEX_ADDR, storedSlot);
-  if (storedSlot == 0xFFFF) {  // both bytes are 0xFF
-    Serial.println("EEPROM uninitialized. Initializing slot index to 0.");
-    EEPROM.put(SLOT_INDEX_ADDR, (uint16_t)0);
-  } else {
-    Serial.println("EEPROM already initialized.");
-    // // uncomment if manually resetting EEPROM lifetime gem data
-    // Serial.println("Resetting EEPROM lifetime gem data.");
-    // clearGemCountEEPROM();
-    Serial.print("Slot Index Address: ");
-    Serial.println(storedSlot);
-  }
-
-  lifetimeGemCount = readLifetimeGemCount();
   Serial.print("Lifetime Gem Count: ");
   Serial.println(lifetimeGemCount);
   Serial.println("");
@@ -236,7 +209,8 @@ void loop() {
 
   if (sessionGemCount >= GEMS_PER_SAVE) {
     lifetimeGemCount += sessionGemCount;
-    saveGemCount(lifetimeGemCount);
+    // saveGemCount(lifetimeGemCount);
+    gem_store_write_lifetime(lifetimeGemCount);
     sessionGemCount = 0;
   }
 }
@@ -260,131 +234,4 @@ void scheduleNextTap() {
     if (adjusted < 0) adjusted = 0;
     nextTapTime = (unsigned long)adjusted;
   }
-}
-
-void startTapSequence(int mosfetPin, int numTaps) {
-  tappingActive = true;
-  currentTap = 0;
-  solenoidOn = false;
-  tapPhaseStart = millis();
-  tappingPin = mosfetPin;
-  totalTaps = numTaps;
-  // ui_clear();
-}
-
-void updateTapSequence(unsigned long now) {
-  if (!tappingActive) return;
-
-  if (!solenoidOn && now - tapPhaseStart >= pauseBetweenTaps) {
-    // Turn solenoid on
-    // Serial.print("Solenoid: ");
-    // Serial.println(tappingPin);
-    digitalWrite(tappingPin, HIGH);
-    solenoidOn = true;
-    tapPhaseStart = now;
-  }
-  else if (solenoidOn && now - tapPhaseStart >= tapDuration) {
-    // Turn solenoid off
-    digitalWrite(tappingPin, LOW);
-    solenoidOn = false;
-    tapPhaseStart = now;
-    currentTap++;
-
-    if (currentTap >= totalTaps) {
-      tappingActive = false;
-
-      // Transition to next solenoid
-      if (!adGemsComplete) {
-        adGemsComplete = true;
-        startTapSequence(FLOAT_GEMS_MOSFET_GATE_PIN, floatGemTaps);
-      } else {
-        adGemsComplete = false;
-      }
-    }
-  }
-}
-
-uint32_t readLifetimeGemCount() {
-  // retrieve latest slot index
-  uint16_t lastSlotIndex;
-  EEPROM.get(SLOT_INDEX_ADDR, lastSlotIndex);
-
-  // fallback in case of corruption
-  if (lastSlotIndex >= MAX_GEM_SLOTS) {
-    lastSlotIndex = 0;
-    uint32_t savedCount = 0;
-    EEPROM.get(GEM_SLOTS_START, savedCount);
-    return savedCount;
-  }
-
-  // load last stored gem count
-  uint16_t readAddress = GEM_SLOTS_START + (lastSlotIndex * BYTES_PER_SLOT);
-  uint32_t savedCount = 0;
-  EEPROM.get(readAddress, savedCount);
-
-  if (savedCount == 0xFFFFFFFF) {
-    return 0; // special case when uninitialized
-  }
-
-  // load last stored checksum
-  uint8_t storedChecksum = EEPROM.read(readAddress + BYTES_PER_SLOT - 1);
-
-  // exit early if no checksum detected (only occurs during first use)
-  if (storedChecksum == 0xFF) {
-    return savedCount;
-  }
-
-  // compute checksum based on loaded gem count
-  uint8_t computedChecksum = (savedCount & 0xFF) ^
-                              ((savedCount >> 8) & 0xFF) ^
-                              ((savedCount >> 16) & 0xFF) ^
-                              ((savedCount >> 24) & 0xFF);
-
-  // compare computed checksum with stored checksum to check for corruption
-  if (computedChecksum != storedChecksum) {
-    // fallback: try previous slot (if one exists)
-    if (lastSlotIndex > 0) {
-      uint16_t previousAddress = GEM_SLOTS_START + ((lastSlotIndex - 1) * BYTES_PER_SLOT);
-      uint32_t previousSavedCount = 0;
-      EEPROM.get(previousAddress, previousSavedCount);
-      uint8_t previousChecksum = EEPROM.read(previousAddress + BYTES_PER_SLOT - 1);
-      uint8_t previousComputedChecksum = (previousSavedCount & 0xFF) ^
-                                          ((previousSavedCount >> 8) & 0xFF) ^
-                                          ((previousSavedCount >> 16) & 0xFF) ^
-                                          ((previousSavedCount >> 24) & 0xFF);
-      if (previousChecksum == previousComputedChecksum) {
-        return previousSavedCount; // successful fallback
-      }
-    }
-    return 0; // corruption detected with no valid fallback
-  }
-
-  return savedCount;
-}
-
-void saveGemCount(uint32_t countToSave) {
-  uint16_t lastSlotIndex ;
-  EEPROM.get(SLOT_INDEX_ADDR, lastSlotIndex);
-  if (lastSlotIndex >= MAX_GEM_SLOTS) {
-    lastSlotIndex = 0;  // fallback in case of corruption
-  }
-  uint8_t checksum = (countToSave & 0xFF) ^
-                      ((countToSave >> 8) & 0xFF) ^
-                      ((countToSave >> 16) & 0xFF) ^
-                      ((countToSave >> 24) & 0xFF);
-
-  uint8_t nextSlotIndex = (lastSlotIndex + 1) % MAX_GEM_SLOTS;
-  uint16_t writeAddress = GEM_SLOTS_START + (nextSlotIndex * BYTES_PER_SLOT);
-
-  EEPROM.put(writeAddress, countToSave);
-  EEPROM.put(writeAddress + BYTES_PER_SLOT - 1, checksum);
-  EEPROM.put(SLOT_INDEX_ADDR, nextSlotIndex);
-}
-
-void clearGemCountEEPROM() {
-  // debug tool function for manually resetting all gem-related EEPROM data
-  for (uint16_t i = GEM_SLOTS_START; i < EEPROM.length(); ++i) {
-    EEPROM.update(i, 0xFF);
-  }
-  EEPROM.put(SLOT_INDEX_ADDR, (uint16_t)0);
 }
