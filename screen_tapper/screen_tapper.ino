@@ -9,6 +9,9 @@
 #include "clock.h"
 #include "tapper.h"
 #include "gem_store.h"
+#include "encoder.h"
+#include "menu.h"
+#include "ui12864_menu.h"
 
 uint16_t tapDuration = 13;
 
@@ -67,6 +70,10 @@ void setup() {
   ui_begin();
   ui_setMode(UIMode::ACTIVE_MODE);
 
+  encoder_begin(ENCODER_CLK, ENCODER_DT, ENCODER_SW);
+  menu_begin();
+  ui12864_menu_begin();
+
   input_begin();
 
   gem_store_begin();
@@ -87,6 +94,19 @@ void loop() {
 
   static bool wasAwake = false;
   bool awake = overrideClock || clock_isAwake(sched);
+
+  auto ev = encoder_poll();
+  MenuHomeData hd;
+  hd.lifetimeGems = displayedGemCount;
+  hd.msLeft = 0;
+  menu_setHomeData(hd);
+  MenuAction act;
+  if (menu_update(ev.delta, ev.pressed, act)) {
+    // insert actual functionality later
+  }
+  MenuView view;
+  menu_getView(view);
+  ui12864_menu_render(view);
 
   if (awake && !wasAwake) {
     scheduleNextTap();
