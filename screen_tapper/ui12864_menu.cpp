@@ -10,7 +10,7 @@ static U8G2_ST7920_128X64_F_SW_SPI u8g2(U8G2_R0, LCD12864_CLK, LCD12864_DAT, LCD
 // fonts
 static const uint8_t* FONT_TITLE   = u8g2_font_7x14B_tf;    // header
 static const uint8_t* FONT_BODY    = u8g2_font_6x10_tf;     // normal text
-static const uint8_t* FONT_NUMBER  = u8g2_font_10x20_tf;    // big numbers
+static const uint8_t* FONT_NUMBER  = u8g2_font_logisoso18_tf;    // big numbers
 static const uint8_t* FONT_SMALL   = u8g2_font_5x8_tf;      // tiny helpers
 
 // layout
@@ -21,7 +21,7 @@ static const uint8_t LINE_H_BODY  = 10;
 static const uint8_t LINE_H_TITLE = 14;
 static const uint8_t MARGIN = 2;
 static const uint8_t GAP_LABEL_VALUE = 4;
-static const uint8_t GEM_Y = 38;
+static const uint8_t GEM_Y = 30;
 
 // small helpers
 static void headerBar(const char* title) {
@@ -84,37 +84,78 @@ static void drawSoftKeys(const char* left, const char* right) {
   }
 }
 
+// Draw a 16x16 cut-diamond icon at top-left (x,y)
+static void drawGem16(int x, int y) {
+  // Outer diamond corners
+  int cx = x + 8;       // center x
+  int top = y;
+  int leftY = y + 6;
+  int rightY = y + 6;
+  int bottom = y + 15;
+
+  // Outer outline
+  u8g2.drawLine(cx, top,   x + 0, leftY);   // top -> left
+  u8g2.drawLine(cx, top,   x + 15, rightY); // top -> right
+  u8g2.drawLine(x + 0, leftY,  x + 8, bottom); // left -> bottom
+  u8g2.drawLine(x + 15, rightY, x + 8, bottom); // right -> bottom
+
+  // Facets: a simple “cut” look
+  // vertical spine
+  u8g2.drawLine(cx, top, cx, bottom);
+  // left facet
+  u8g2.drawLine(x + 0, leftY, cx, y + 9);
+  // right facet
+  u8g2.drawLine(x + 15, rightY, cx, y + 9);
+}
+
+// custom gem symbol
+static const unsigned char gem16_bitmap[] U8X8_PROGMEM = {
+  0b11111000, 0b00111111,
+  0b01101100, 0b01101100,
+  0b11000110, 0b11000110,
+  0b10000010, 0b10000011,
+  0b11111110, 0b11111111,
+  0b00000110, 0b11000001,
+  0b00001100, 0b01100001,
+  0b00011000, 0b00110001,
+  0b00110000, 0b00011001,
+  0b01100000, 0b00001101,
+  0b11000000, 0b00000111,
+  0b10000000, 0b00000011,
+  0b00000000, 0b00000001,
+  0b00000000, 0b00000000,
+  0b00000000, 0b00000000,
+  0b00000000, 0b00000000,
+};
+
 // views
 static void viewHome(const MenuView& v) {
-  headerBar("Home");
+  u8g2.drawFrame(0, 0, W, H);
 
   // big gem count in the middle
   char gems[24];
   fmt_commas(v.lifetimeGems, gems, sizeof(gems));
 
   u8g2.setFont(FONT_NUMBER);
-  int16_t gemsW = u8g2.getStrWidth(gems);
-  int16_t gx = (W - gemsW) / 2;
+  int16_t gemsW   = u8g2.getStrWidth(gems);
+  int16_t totalW  = 16 + 2 + gemsW;  // 16 px icon + spacing
+  int16_t gx = (W - totalW) / 2;
   int16_t gy = GEM_Y;
-  u8g2.setCursor(gx, gy);
+
+  // draw the icon baseline-aligned
+  u8g2.drawXBMP(gx, gy - 15, 16, 16, gem16_bitmap);  // adjust -16 if FONT_NUMBER is ~16px tall
+
+  u8g2.setCursor(gx + 16 + 2, gy);
   u8g2.print(gems);
 
-  // next tap at bottom
   char t[16];
   fmt_mm_ss(v.msLeft, t, sizeof(t));
-  u8g2.setFont(FONT_BODY);
-  const char* label = "Next:";
-  int lw = u8g2.getStrWidth(label);
-  int tw = u8g2.getStrWidth(t);
-  int total = lw + 4 + tw;
-  int x = (W - total) / 2;
-  int y = H - 8;
-  u8g2.setCursor(x, y);
-  u8g2.print(label);
-  u8g2.setCursor(x+lw+4, y);
+  u8g2.setFont(FONT_NUMBER);
+  int16_t timeW = u8g2.getStrWidth(t);
+  int16_t tx = (W - timeW) / 2;
+  int16_t ty = H - 10;
+  u8g2.setCursor(tx, ty);
   u8g2.print(t);
-
-  drawSoftKeys(nullptr, "Press=Settings");
 }
 
 static void viewList(const MenuView& v) {
@@ -134,7 +175,6 @@ static void viewList(const MenuView& v) {
     drawSelectableRow(y, v.items[start + i], sel);
     y += LINE_H_BODY + MARGIN;
   }
-  drawSoftKeys(nullptr, "Press = Select");
 }
 
 static void viewEditNumber(const MenuView& v) {

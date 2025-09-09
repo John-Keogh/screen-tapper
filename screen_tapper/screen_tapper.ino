@@ -13,7 +13,7 @@
 #include "menu.h"
 #include "ui12864_menu.h"
 
-uint16_t tapDuration = 13;
+uint16_t tapDuration = 25;
 
 // ==== Clock ====
 SleepSchedule sched;
@@ -94,19 +94,6 @@ void loop() {
 
   static bool wasAwake = false;
   bool awake = overrideClock || clock_isAwake(sched);
-
-  auto ev = encoder_poll();
-  MenuHomeData hd;
-  hd.lifetimeGems = displayedGemCount;
-  hd.msLeft = 0;
-  menu_setHomeData(hd);
-  MenuAction act;
-  if (menu_update(ev.delta, ev.pressed, act)) {
-    // insert actual functionality later
-  }
-  MenuView view;
-  menu_getView(view);
-  ui12864_menu_render(view);
 
   if (awake && !wasAwake) {
     scheduleNextTap();
@@ -230,10 +217,10 @@ void loop() {
     lastDisplayChange = now;
   }
 
+  uint32_t timeLeft = 0;
+  int32_t dt = (int32_t)(nextTapTime - now);
+  if (dt > 0) timeLeft = (uint32_t) dt;
   if (displayState == 0) {
-    uint32_t timeLeft = 0;
-    int32_t dt = (int32_t)(nextTapTime - now);
-    if (dt > 0) timeLeft = (uint32_t) dt;
     ui_showNextTapCountdown(timeLeft);
   } else {
     displayedGemCount = lifetimeGemCount + sessionGemCount;
@@ -244,6 +231,25 @@ void loop() {
     lifetimeGemCount += sessionGemCount;
     gem_store_write_lifetime(lifetimeGemCount);
     sessionGemCount = 0;
+  }
+
+  // update 128x64 LCD
+  auto ev = encoder_poll();
+  MenuHomeData hd;
+  hd.lifetimeGems = displayedGemCount;
+  hd.msLeft = timeLeft;
+  menu_setHomeData(hd);
+  MenuAction act;
+  if (menu_update(ev.delta, ev.pressed, act)) {
+    // insert actual functionality later
+  }
+  static unsigned long lastFrameMs = 0;
+  const unsigned long framePeriodMs = 66; // ~15 FPS
+  if (now - lastFrameMs >= framePeriodMs) {
+    lastFrameMs = now;
+    MenuView view;
+    menu_getView(view);
+    ui12864_menu_render(view);
   }
 }
 
