@@ -21,7 +21,7 @@ constexpr int LCD_D6 = 33;
 constexpr int LCD_D7 = 32;
 
 // 128x64 LCD
-constexpr int ENCODER_CLK  = 9;
+constexpr int ENCODER_CLK  = 3;
 constexpr int ENCODER_DT   = 7;
 constexpr int ENCODER_SW   = 5;
 constexpr int LCD12864_CLK = 4;

@@ -8,7 +8,7 @@ static const char* const kSettingsItems[] = {
   "Return to Home",
   "Toggle On/Off",
   "Reset Next Tap",
-  "Adjust Tap Duration",
+  "Set Tap Duration",
   "Set Sleep Time",
   "Set Wake Time",
   "Set Gem Count",

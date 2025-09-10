@@ -92,6 +92,8 @@ void setup() {
 void loop() {
   unsigned long now = millis();
 
+  auto ev = encoder_poll();
+
   static bool wasAwake = false;
   bool awake = overrideClock || clock_isAwake(sched);
 
@@ -234,7 +236,6 @@ void loop() {
   }
 
   // update 128x64 LCD
-  auto ev = encoder_poll();
   MenuHomeData hd;
   hd.lifetimeGems = displayedGemCount;
   hd.msLeft = timeLeft;

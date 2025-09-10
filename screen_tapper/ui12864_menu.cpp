@@ -14,24 +14,69 @@ static const uint8_t* FONT_NUMBER  = u8g2_font_logisoso18_tf;    // big numbers
 static const uint8_t* FONT_SMALL   = u8g2_font_5x8_tf;      // tiny helpers
 
 // layout
-static const uint8_t W            = 128;
-static const uint8_t H            = 64;
-static const uint8_t PAD          = 2;
-static const uint8_t LINE_H_BODY  = 10;
-static const uint8_t LINE_H_TITLE = 14;
-static const uint8_t MARGIN = 2;
-static const uint8_t GAP_LABEL_VALUE = 4;
-static const uint8_t GEM_Y = 30;
+static const uint8_t W                = 128;
+static const uint8_t H                = 64;
+static const uint8_t PAD              = 2;
+static const uint8_t LINE_H_BODY      = 10;
+static const uint8_t LINE_H_TITLE     = 10;
+static const uint8_t MARGIN           = 0;
+static const uint8_t GAP_LABEL_VALUE  = 4;
+static const uint8_t GEM_Y            = 30;
+
+// first visible row for list views
+static uint8_t s_first = 0;
+static const uint8_t kReturnIdx = 0;  // "Return to Home" item
+
+// custom symbols
+// left arrow symbol
+static const unsigned char larrow_bitmap[] U8X8_PROGMEM = {
+  0b00000000,
+  0b00000000,
+  0b00010000,
+  0b00100000,
+  0b01111110,
+  0b00100000,
+  0b00010000,
+  0b00000000
+};
+
+// return symbol
+static const unsigned char return_bitmap[] U8X8_PROGMEM = {
+  0b00000000,
+  0b00010000,
+  0b00111000,
+  0b01111100,
+  0b00010000,
+  0b00011110,
+  0b00000000,
+  0b00000000
+};
+
+// custom gem symbol
+static const unsigned char gem16_bitmap[] U8X8_PROGMEM = {
+  0b11111000, 0b00111111,
+  0b01101100, 0b01101100,
+  0b11000110, 0b11000110,
+  0b10000010, 0b10000011,
+  0b11111110, 0b11111111,
+  0b00000110, 0b11000001,
+  0b00001100, 0b01100001,
+  0b00011000, 0b00110001,
+  0b00110000, 0b00011001,
+  0b01100000, 0b00001101,
+  0b11000000, 0b00000111,
+  0b10000000, 0b00000011,
+  0b00000000, 0b00000001,
+  0b00000000, 0b00000000,
+  0b00000000, 0b00000000,
+  0b00000000, 0b00000000,
+};
 
 // small helpers
 static void headerBar(const char* title) {
   u8g2.setFont(FONT_TITLE);
-  u8g2.setDrawColor(1);
-  u8g2.drawBox(0, 0, W, LINE_H_TITLE + MARGIN);
-  u8g2.setDrawColor(0); // invert text on bar
   u8g2.setCursor(PAD, LINE_H_TITLE);
-  u8g2.print(title ? title: "");
-  u8g2.setDrawColor(1); // restore
+  u8g2.print(title);
 }
 
 static void drawLabelAt(int x, int y, const char* s) {
@@ -58,18 +103,6 @@ static void fmt_mm_ss(uint32_t ms, char* out, size_t outSz) {
   snprintf(out, outSz, "%02lu:%02lu", (unsigned long)mm, (unsigned long)ss);
 }
 
-static void drawSelectableRow(uint8_t yTop, const char* text, bool selected) {
-  // row background if selected
-  if (selected) u8g2.drawBox(0, yTop, W, LINE_H_BODY + 2);
-  // text
-  u8g2.setFont(FONT_BODY);
-  u8g2.setDrawColor(selected ? 0 : 1);
-  u8g2.setCursor(PAD, yTop + LINE_H_BODY);
-  u8g2.print(text ? text : "");
-  // reset color
-  u8g2.setDrawColor(1);
-}
-
 static void drawSoftKeys(const char* left, const char* right) {
   // small footer helpers
   u8g2.setFont(FONT_SMALL);
@@ -83,50 +116,6 @@ static void drawSoftKeys(const char* left, const char* right) {
     u8g2.print(right);
   }
 }
-
-// Draw a 16x16 cut-diamond icon at top-left (x,y)
-static void drawGem16(int x, int y) {
-  // Outer diamond corners
-  int cx = x + 8;       // center x
-  int top = y;
-  int leftY = y + 6;
-  int rightY = y + 6;
-  int bottom = y + 15;
-
-  // Outer outline
-  u8g2.drawLine(cx, top,   x + 0, leftY);   // top -> left
-  u8g2.drawLine(cx, top,   x + 15, rightY); // top -> right
-  u8g2.drawLine(x + 0, leftY,  x + 8, bottom); // left -> bottom
-  u8g2.drawLine(x + 15, rightY, x + 8, bottom); // right -> bottom
-
-  // Facets: a simple “cut” look
-  // vertical spine
-  u8g2.drawLine(cx, top, cx, bottom);
-  // left facet
-  u8g2.drawLine(x + 0, leftY, cx, y + 9);
-  // right facet
-  u8g2.drawLine(x + 15, rightY, cx, y + 9);
-}
-
-// custom gem symbol
-static const unsigned char gem16_bitmap[] U8X8_PROGMEM = {
-  0b11111000, 0b00111111,
-  0b01101100, 0b01101100,
-  0b11000110, 0b11000110,
-  0b10000010, 0b10000011,
-  0b11111110, 0b11111111,
-  0b00000110, 0b11000001,
-  0b00001100, 0b01100001,
-  0b00011000, 0b00110001,
-  0b00110000, 0b00011001,
-  0b01100000, 0b00001101,
-  0b11000000, 0b00000111,
-  0b10000000, 0b00000011,
-  0b00000000, 0b00000001,
-  0b00000000, 0b00000000,
-  0b00000000, 0b00000000,
-  0b00000000, 0b00000000,
-};
 
 // views
 static void viewHome(const MenuView& v) {
@@ -159,20 +148,57 @@ static void viewHome(const MenuView& v) {
 }
 
 static void viewList(const MenuView& v) {
-  headerBar(v.title);
+  const uint8_t visibleRows = 6;
 
-  // show up to 5 rows
-  uint8_t visibleRows = 5;
-  uint8_t start = 0;
-  if (v.itemCount > visibleRows) {
-    // keep selection centered when possible
-    if (v.selected >= 2) start = v.selected - 2;
-    if (start + visibleRows > v.itemCount) start = v.itemCount - visibleRows;
+  // ---- edge-stick scrolling ----
+  // If selection moved above current window, scroll up.
+  if (v.selected < s_first) {
+    s_first = v.selected;
   }
-  uint8_t y = LINE_H_TITLE + 4;
-  for (uint8_t i = 0; i < visibleRows && (start + i) < v.itemCount; ++i) {
-    bool sel = (start + i) == v.selected;
-    drawSelectableRow(y, v.items[start + i], sel);
+  // If selection moved below current window, scroll down.
+  else if (v.selected >= (uint8_t)(s_first + visibleRows)) {
+    // move window just enough so selected sits on the bottom row
+    s_first = (uint8_t)(v.selected - (visibleRows - 1));
+  }
+
+  // Clamp s_first so we don't run past the end
+  if (v.itemCount <= visibleRows) {
+    s_first = 0;
+  } else {
+    uint8_t maxFirst = (uint8_t)(v.itemCount - visibleRows);
+    if (s_first > maxFirst) s_first = maxFirst;
+  }
+
+  // draw rows
+  u8g2.setFont(FONT_BODY);
+  uint8_t y = 0;
+  for (uint8_t i = 0; i < visibleRows; ++i) {
+    uint8_t idx = (uint8_t)(s_first + i);
+    if (idx >= v.itemCount) break;
+
+    bool selected = (idx == v.selected);
+    const char* text = v.items[idx] ? v.items[idx] : "";
+
+    const int xMarker = PAD;
+    const int xText   = 8;  // leave room for "> "
+
+    u8g2.setCursor(xMarker, y + LINE_H_BODY);
+    u8g2.print(selected ? ">" : " ");
+
+    u8g2.setCursor(xText, y + LINE_H_BODY);
+    u8g2.print(text);
+
+    const uint8_t iconW = 8;
+    const uint8_t iconH = 8;
+    const int16_t x = W - 18;
+    const int16_t yIcon = y + LINE_H_BODY - 7;
+
+    // idxes correspond to actions that don't prompt further input
+    const unsigned char* bmp =
+      (idx == 0 || idx == 1 || idx == 2 || idx == 7) ? return_bitmap : larrow_bitmap;
+
+    u8g2.drawXBMP(x, yIcon, iconW, iconH, bmp);
+
     y += LINE_H_BODY + MARGIN;
   }
 }
