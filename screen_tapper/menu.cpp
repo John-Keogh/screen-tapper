@@ -341,3 +341,18 @@ void menu_getView(MenuView& v) {
       break;
   }
 }
+
+void menu_openTapDurationEditor(uint32_t initial) {
+  enter_num_editor(initial, TAP_MIN_MS, TAP_MAX_MS, UNIT_MS);
+  s_screen = MenuScreen::EditTapDuration;
+}
+
+void menu_openSleepTimeEditor(uint8_t hh, uint8_t mm) {
+  enter_time_editor(hh, mm);
+  s_screen = MenuScreen::EditSleepTime;
+}
+
+void menu_openWakeTimeEditor(uint8_t hh, uint8_t mm) {
+  enter_time_editor(hh, mm);
+  s_screen = MenuScreen::EditWakeTime;
+}

@@ -80,3 +80,10 @@ bool menu_update(int encDelta, bool pressed, MenuAction& outAction);
 
 // call after menu_update() to ask what to draw
 void menu_getView(MenuView& outView);
+
+// open the tap duration number editor
+void menu_openTapDurationEditor(uint32_t initial);
+
+// open time editor
+void menu_openSleepTimeEditor(uint8_t hh, uint8_t mm);
+void menu_openWakeTimeEditor(uint8_t hh, uint8_t mm);

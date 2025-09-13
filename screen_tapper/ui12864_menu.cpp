@@ -10,7 +10,7 @@ static U8G2_ST7920_128X64_F_SW_SPI u8g2(U8G2_R0, LCD12864_CLK, LCD12864_DAT, LCD
 // fonts
 static const uint8_t* FONT_TITLE   = u8g2_font_7x14B_tf;    // header
 static const uint8_t* FONT_BODY    = u8g2_font_6x10_tf;     // normal text
-static const uint8_t* FONT_NUMBER  = u8g2_font_logisoso18_tf;    // big numbers
+static const uint8_t* FONT_NUMBER  = u8g2_font_logisoso16_tf;    // big numbers
 static const uint8_t* FONT_SMALL   = u8g2_font_5x8_tf;      // tiny helpers
 
 // layout
@@ -22,10 +22,17 @@ static const uint8_t LINE_H_TITLE     = 10;
 static const uint8_t MARGIN           = 0;
 static const uint8_t GAP_LABEL_VALUE  = 4;
 static const uint8_t GEM_Y            = 30;
+static const uint8_t TAP_DURATION_Y   = 26;
+static const uint8_t CLOCK_Y          = 26;
+static const uint8_t COLUMN_GAP       = 20;
 
 // first visible row for list views
 static uint8_t s_first = 0;
-static const uint8_t kReturnIdx = 0;  // "Return to Home" item
+
+// update flags for LCD screen
+static bool lcdDirty = true;  // true: update, false: skip
+static const uint16_t framePeriodMs = 100; // 10 FPS max
+static uint32_t nextFrameMs = 0;
 
 // custom symbols
 // left arrow symbol
@@ -72,6 +79,27 @@ static const unsigned char gem16_bitmap[] U8X8_PROGMEM = {
   0b00000000, 0b00000000,
 };
 
+// custom hand pointing symbol
+static const unsigned char countdown16_bitmap[] U8X8_PROGMEM = {
+  0b11111111, 0b00000011,
+  0b11111111, 0b00000011,
+  0b00110000, 0b00000000,
+  0b00110000, 0b00000000,
+  0b00110000, 0b00000000,
+  0b00110000, 0b00000000,
+  0b00110000, 0b11110000,
+  0b00110000, 0b11110000,
+  0b00110000, 0b00000000,
+  0b00110000, 0b00000000,
+  0b00110000, 0b00000000,
+  0b00110000, 0b00000000,
+  0b00110000, 0b00000000,
+  0b00110000, 0b00000000,
+  0b00000000, 0b00000000,
+  0b00000000, 0b00000000,
+};
+
+
 // small helpers
 static void headerBar(const char* title) {
   u8g2.setFont(FONT_TITLE);
@@ -117,6 +145,11 @@ static void drawSoftKeys(const char* left, const char* right) {
   }
 }
 
+static void maybeMarkDirtyFromView(const MenuView& v) {
+  uint32_t secondsLeft = v.msLeft / 1000;
+
+}
+
 // views
 static void viewHome(const MenuView& v) {
   u8g2.drawFrame(0, 0, W, H);
@@ -124,25 +157,28 @@ static void viewHome(const MenuView& v) {
   // big gem count in the middle
   char gems[24];
   fmt_commas(v.lifetimeGems, gems, sizeof(gems));
-
   u8g2.setFont(FONT_NUMBER);
   int16_t gemsW   = u8g2.getStrWidth(gems);
-  int16_t totalW  = 16 + 2 + gemsW;  // 16 px icon + spacing
-  int16_t gx = (W - totalW) / 2;
+  int16_t totalGemsW  = 16 + 2 + gemsW;  // 16 px icon + spacing
+  int16_t gx = (W - totalGemsW) / 2;
   int16_t gy = GEM_Y;
 
-  // draw the icon baseline-aligned
   u8g2.drawXBMP(gx, gy - 15, 16, 16, gem16_bitmap);  // adjust -16 if FONT_NUMBER is ~16px tall
-
   u8g2.setCursor(gx + 16 + 2, gy);
   u8g2.print(gems);
 
+  // countdown to next tap
   char t[16];
   fmt_mm_ss(v.msLeft, t, sizeof(t));
   u8g2.setFont(FONT_NUMBER);
   int16_t timeW = u8g2.getStrWidth(t);
+  // int16_t totalTimeW = 16 + 2 + timeW;
+  // int16_t tx = (W - totalTimeW) / 2;
   int16_t tx = (W - timeW) / 2;
   int16_t ty = H - 10;
+
+  // u8g2.drawXBMP(tx, ty - 15, 16, 16, countdown16_bitmap);
+  // u8g2.setCursor(tx + 16 + 2, ty);
   u8g2.setCursor(tx, ty);
   u8g2.print(t);
 }
@@ -204,10 +240,9 @@ static void viewList(const MenuView& v) {
 }
 
 static void viewEditNumber(const MenuView& v) {
-  headerBar(v.title);
+  // slots: 0 = Value, 1 = Save, 2 = Back, 3 = Home
 
-  // slots: 0 is value; 1 is save; 2 is back; 3 is home
-  // show big centered value with unit
+  // ---------- Big centered value ----------
   char buf[24];
   if (v.unit && strcmp(v.unit, "ms") == 0) {
     snprintf(buf, sizeof(buf), "%lu ms", (unsigned long)v.value);
@@ -219,105 +254,243 @@ static void viewEditNumber(const MenuView& v) {
     snprintf(buf, sizeof(buf), "%lu", (unsigned long)v.value);
   }
 
+  const bool editingValue      = v.editing;  // actively editing the Value
+  const bool showBottomMarkers = !v.editing; // hide all bottom '>' while editing
+
+  // Measure number
   u8g2.setFont(FONT_NUMBER);
-  int w = u8g2.getStrWidth(buf);
-  int x = (W - w) / 2;
-  int y = GEM_Y;
-  if (v.editing) {
-    // draw a light box behind the value to show "editing" state
-    int h = 22;
-    u8g2.drawRBox(x - MARGIN, y - h + GAP_LABEL_VALUE, w + GAP_LABEL_VALUE, h, 3);
-    u8g2.setDrawColor(0);
-    u8g2.setCursor(x, y);
-    u8g2.print(buf);
-    u8g2.setDrawColor(1);
-  } else {
-    u8g2.setCursor(x, y);
-    u8g2.print(buf);
+  int numW = u8g2.getStrWidth(buf);
+  int numX = (W - numW) / 2;
+  int numY = TAP_DURATION_Y;
+
+  // When editing the value, show a big ">" next to the number with tight spacing
+  if (editingValue) {
+    const char* bigMarker = ">";
+    u8g2.setFont(FONT_NUMBER);
+    int markerW = u8g2.getStrWidth(bigMarker);
+    int markerX = numX - markerW - 1;  // tighter padding
+    if (markerX < PAD) markerX = PAD;
+    int markerY = numY;
+    u8g2.setCursor(markerX, markerY);
+    u8g2.print(bigMarker);
   }
 
-  // soft options along bottom as selectable rows
-  // render a tiny menu bar of choices indicating which is selected
+  // Draw the big value (no background box)
+  u8g2.setFont(FONT_NUMBER);
+  u8g2.setCursor(numX, numY);
+  u8g2.print(buf);
+
+  // ---------- Bottom choices in a 2×2 grid, centered (labels only) ----------
+  // Visual layout:
+  //  [Value(0)]   [Back(2)]
+  //  [Save (1)]   [Home(3)]
+  //
+  // Centering uses ONLY label widths. The small '>' is drawn in a fixed gutter
+  // at a constant offset to the left of each label to avoid any jitter.
   const char* choices[4] = { "Value", "Save", "Back", "Home" };
-  int cx = PAD;
-  int cy = H - 10;
+
+  // Row baselines near the bottom
+  const int row1Y = H - 20;
+  const int row2Y = H - 8;
+
+  // Font and marker metrics
   u8g2.setFont(FONT_BODY);
-  for (uint8_t i = 0; i < 4; ++i) {
-    const char* c = choices[i];
-    int cw = u8g2.getStrWidth(c) + 4;
-    if (v.selected == i) {
-      u8g2.drawBox(cx - 1, cy - 9, cw + 2, 11);
-      u8g2.setDrawColor(0);
-      u8g2.setCursor(cx, cy);
-      u8g2.print(c);
-      u8g2.setDrawColor(1);
-    } else {
-      u8g2.setCursor(cx, cy);
-      u8g2.print(c);
+  const int markerGutterW = u8g2.getStrWidth(">"); // fixed gutter width for all cells
+
+  // Helper to measure label width (no marker)
+  auto labelW = [&](int idx) -> int {
+    return u8g2.getStrWidth(choices[idx] ? choices[idx] : "");
+  };
+
+  // Compute centered startX for a row (labels only)
+  auto centeredStartX = [&](int idxLeft, int idxRight) -> int {
+    int leftW  = labelW(idxLeft);
+    int rightW = labelW(idxRight);
+    int totalW = leftW + COLUMN_GAP + rightW;
+    int startX = (W - totalW) / 2;
+    if (startX < PAD + markerGutterW) startX = PAD + markerGutterW; // keep room for gutter
+    return startX;
+  };
+
+  // Draw one row: labels centered; markers in fixed gutter to the left of each label
+  auto drawCenteredRow = [&](int idxLeft, int idxRight, int y) {
+    int startX  = centeredStartX(idxLeft, idxRight);
+    int leftW   = labelW(idxLeft);
+    int rightW  = labelW(idxRight);
+
+    int leftX   = startX;
+    int rightX  = startX + leftW + COLUMN_GAP;
+
+    // LEFT cell
+    {
+      bool selLeft     = (v.selected == idxLeft);
+      bool showMarker  = showBottomMarkers && selLeft;
+      // Draw marker in fixed gutter (not included in centering)
+      if (showMarker) {
+        u8g2.setCursor(leftX - markerGutterW, y);
+        u8g2.print(">");
+      }
+      u8g2.setCursor(leftX, y);
+      u8g2.print(choices[idxLeft]);
     }
-    cx += cw + GAP_LABEL_VALUE;
-  }
+
+    // RIGHT cell
+    {
+      bool selRight    = (v.selected == idxRight);
+      bool showMarker  = showBottomMarkers && selRight;
+      if (showMarker) {
+        u8g2.setCursor(rightX - markerGutterW, y);
+        u8g2.print(">");
+      }
+      u8g2.setCursor(rightX, y);
+      u8g2.print(choices[idxRight]);
+    }
+  };
+
+  // Rows (swap Save/Back positions visually; order unchanged)
+  drawCenteredRow(0, 2, row1Y); // Value (0), Back (2)
+  drawCenteredRow(1, 3, row2Y); // Save  (1), Home (3)
 }
+
 
 static void viewEditTime(const MenuView& v) {
-  headerBar(v.title);
+  // slots: 0 = Time, 1 = Save, 2 = Back, 3 = Home
 
-  // show HH:MM centered; highlight active field when editing
+  // ---------- Big centered time ----------
   char t[8];
   snprintf(t, sizeof(t), "%02u:%02u", (unsigned)v.hh, (unsigned)v.mm);
-  u8g2.setFont(FONT_NUMBER);
-  int w = u8g2.getStrWidth(t);
-  int x = (W - w) / 2;
-  int baseline = GEM_Y;
 
-  // draw time
-  u8g2.setCursor(x, baseline);
+  const bool editingTime       = v.editingTime;       // actively editing time
+  const bool showBottomMarkers = !v.editingTime;      // hide all bottom '>' while editing
+
+  // Measure time string
+  u8g2.setFont(FONT_NUMBER);
+  int timeW = u8g2.getStrWidth(t);
+  int timeX = (W - timeW) / 2;
+  int timeY = CLOCK_Y;
+
+  // When editing, show a big ">" next to the time (tight spacing)
+  if (editingTime) {
+    const char* bigMarker = ">";
+    u8g2.setFont(FONT_NUMBER);
+    int markerW = u8g2.getStrWidth(bigMarker);
+    int markerX = timeX - markerW - 1;   // tight padding like viewEditNumber
+    if (markerX < PAD) markerX = PAD;
+    int markerY = timeY;
+    u8g2.setCursor(markerX, markerY);
+    u8g2.print(bigMarker);
+  }
+
+  // Draw the big time
+  u8g2.setFont(FONT_NUMBER);
+  u8g2.setCursor(timeX, timeY);
   u8g2.print(t);
 
-  if (v.editingTime) {
-    // underline HH or MM area
-    int hhW = u8g2.getStrWidth("00"); // approximate width for HH
+  // While editing, underline the active field (HH or MM)
+  if (editingTime) {
+    int hhW    = u8g2.getStrWidth("00");  // approximate width for HH/MM
     int colonW = u8g2.getStrWidth(":");
-    int mmW = hhW;
-
-    int ux = v.editingHour ? x : x + hhW + colonW;
-    int uw = v.editingHour ? hhW : mmW;
-    u8g2.drawHLine(ux, baseline + 3, uw);
+    int ux     = v.editingHour ? timeX : timeX + hhW + colonW;
+    int uw     = hhW;
+    u8g2.drawHLine(ux, timeY + 3, uw);
   }
 
-  // bottom choices
+  // ---------- Bottom choices in a 2×2 grid, centered (labels only) ----------
+  // Visual layout (order unchanged):
+  //  [Time(0)]   [Back(2)]
+  //  [Save(1)]   [Home(3)]
   const char* choices[4] = { "Time", "Save", "Back", "Home" };
-  int cx = PAD;
-  int cy = H - 10;
+
+  // Row baselines near the bottom
   u8g2.setFont(FONT_BODY);
-  for (uint8_t i = 0; i < 4; ++i) {
-    const char* c = choices[i];
-    int cw = u8g2.getStrWidth(c) + 4;
-    if (v.selected == i) {
-      u8g2.drawBox(cx - 1, cy - 9, cw + 2, 11);
-      u8g2.setDrawColor(0);
-      u8g2.setCursor(cx, cy);
-      u8g2.print(c);
-      u8g2.setDrawColor(1);
-    } else {
-      u8g2.setCursor(cx, cy);
-      u8g2.print(c);
+  const int row1Y = H - 20;
+  const int row2Y = H - 8;
+
+  // Marker gutter is fixed width so labels never shift
+  const int markerGutterW = u8g2.getStrWidth(">");
+
+  // Measure label width (no marker)
+  auto labelW = [&](int idx) -> int {
+    return u8g2.getStrWidth(choices[idx] ? choices[idx] : "");
+  };
+
+  // Compute centered startX for a row (labels only)
+  auto centeredStartX = [&](int idxLeft, int idxRight) -> int {
+    int leftW  = labelW(idxLeft);
+    int rightW = labelW(idxRight);
+    int totalW = leftW + COLUMN_GAP + rightW;
+    int startX = (W - totalW) / 2;
+    if (startX < PAD + markerGutterW) startX = PAD + markerGutterW; // leave room for marker gutter
+    return startX;
+  };
+
+  // Draw one centered row (labels centered; markers in fixed gutter to the left)
+  auto drawCenteredRow = [&](int idxLeft, int idxRight, int y) {
+    int startX = centeredStartX(idxLeft, idxRight);
+    int leftW  = labelW(idxLeft);
+
+    int leftX  = startX;
+    int rightX = startX + leftW + COLUMN_GAP;
+
+    // LEFT cell
+    {
+      bool selLeft    = (v.selected == idxLeft);
+      bool showMarker = showBottomMarkers && selLeft;
+      if (showMarker) {
+        u8g2.setCursor(leftX - markerGutterW, y);
+        u8g2.print(">");
+      }
+      u8g2.setCursor(leftX, y);
+      u8g2.print(choices[idxLeft]);
     }
-    cx += cw + 4;
-  }
+
+    // RIGHT cell
+    {
+      bool selRight   = (v.selected == idxRight);
+      bool showMarker = showBottomMarkers && selRight;
+      if (showMarker) {
+        u8g2.setCursor(rightX - markerGutterW, y);
+        u8g2.print(">");
+      }
+      u8g2.setCursor(rightX, y);
+      u8g2.print(choices[idxRight]);
+    }
+  };
+
+  // Rows (swap Save/Back visually; order unchanged)
+  drawCenteredRow(0, 2, row1Y); // Time (0), Back (2)
+  drawCenteredRow(1, 3, row2Y); // Save (1), Home (3)
 }
+
+// void ui12864_setBacklight(uint8_t pwm) {
+//   analogWrite(LCD12864_LED, pwm);
+// }
+
 
 // API
 void ui12864_menu_begin() {
+  // pinMode(LCD12864_LED, OUTPUT);
+  // ui12864_setBacklight(255);
   u8g2.begin();
   // u8g2.setBusClock(50000); // 50 kHz; uncomment if you see noise
   u8g2.clearBuffer();
   headerBar("Boot");
   drawLabelAt(PAD, LINE_H_TITLE + LINE_H_BODY, "Starting...");
   u8g2.sendBuffer();
+  lcdDirty = true;
+  nextFrameMs = 0;
+}
+
+void ui12864_markDirty() {
+  lcdDirty = true;  // true: update, false: skip
 }
 
 void ui12864_menu_render(const MenuView& v) {
+  maybeMarkDirtyFromView(v);
+
+  uint32_t now = millis();
+  if (lcdDirty == false || now < nextFrameMs) return;
+  
   u8g2.clearBuffer();
 
   switch (v.kind) {
@@ -327,4 +500,7 @@ void ui12864_menu_render(const MenuView& v) {
     case ViewKind::EditTime:    viewEditTime(v);    break;
   }
   u8g2.sendBuffer();
+
+  lcdDirty = false;
+  nextFrameMs = now + framePeriodMs;
 }

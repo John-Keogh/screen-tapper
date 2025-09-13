@@ -23,6 +23,7 @@ unsigned long lastDisplayChange = 0;
 const unsigned long displayInterval = 2500;
 int displayState = 0;
 const int numDisplayStates = 2;
+uint32_t lastShownSeconds = 0;
 
 // ==== Button Logic ====
 bool deviceEnabled = false; // device should be on to begin with (opposite this value for some reason)
@@ -56,9 +57,15 @@ uint32_t sessionGemCount = 0;
 uint32_t displayedGemCount = 0;
 int activationCount = 0;
 uint32_t lifetimeGemCount = 0; // initialization - will be read from EEPROM later
+static uint32_t lastShownGems;
 
+// ==== Menu Helpers ====
+static void handleMenuAction(const MenuAction& act);
+static void renderMenuFrame(uint32_t msLeft, uint32_t gems, const EncoderEvents& ev);
 
 void setup() {
+  delay(1000);
+
   Serial.begin(9600);
   randomSeed(analogRead(0));
 
@@ -78,19 +85,20 @@ void setup() {
 
   gem_store_begin();
   lifetimeGemCount = gem_store_read_lifetime();
-  
-  delay(1000);
 
   Serial.print("Lifetime Gem Count: ");
   Serial.println(lifetimeGemCount);
   Serial.println("");
+
+  lastShownSeconds = UINT32_MAX;
+  lastShownGems = lifetimeGemCount;
 
   scheduleNextTap();
 }
 
 // --------- LOOP FUNCTION ---------
 void loop() {
-  unsigned long now = millis();
+  uint32_t now = millis();
 
   auto ev = encoder_poll();
 
@@ -184,14 +192,13 @@ void loop() {
     return;
   }
 
-  // Emergency stop
   if (!deviceEnabled) {
     tapper_stop();
-  }
-
-  if (!deviceEnabled) {
     ui_setMode(UIMode::OFF_MODE);
     ui_showOff();
+
+    uint32_t gemsNow = lifetimeGemCount + sessionGemCount;
+    renderMenuFrame(0, gemsNow, ev);
     return;
   }
 
@@ -235,23 +242,7 @@ void loop() {
     sessionGemCount = 0;
   }
 
-  // update 128x64 LCD
-  MenuHomeData hd;
-  hd.lifetimeGems = displayedGemCount;
-  hd.msLeft = timeLeft;
-  menu_setHomeData(hd);
-  MenuAction act;
-  if (menu_update(ev.delta, ev.pressed, act)) {
-    // insert actual functionality later
-  }
-  static unsigned long lastFrameMs = 0;
-  const unsigned long framePeriodMs = 66; // ~15 FPS
-  if (now - lastFrameMs >= framePeriodMs) {
-    lastFrameMs = now;
-    MenuView view;
-    menu_getView(view);
-    ui12864_menu_render(view);
-  }
+  renderMenuFrame(timeLeft, displayedGemCount, ev);
 }
 
 void scheduleNextTap() {
@@ -273,4 +264,124 @@ void scheduleNextTap() {
     if (adjusted < 0) adjusted = 0;
     nextTapTime = (unsigned long)adjusted;
   }
+}
+
+static void handleMenuAction(const MenuAction& act) {
+  switch (act.type) {
+    case MenuActionType::GoHome: {
+      menu_reset();
+      ui12864_markDirty();
+      break;
+    }
+
+    case MenuActionType::ToggleDeviceEnabled: {
+      deviceEnabled = !deviceEnabled;
+
+      if (!deviceEnabled) {
+        // Turning OFF: stop hardware, show OFF mode
+        tapper_stop();
+        ui_setMode(UIMode::OFF_MODE);
+      } else {
+        // Turning ON: ACTIVE + seed timing
+        ui_setMode(UIMode::ACTIVE_MODE);
+        scheduleNextTap();
+      }
+
+      // Reset menu to Home and force a redraw
+      menu_reset();
+      ui12864_markDirty();
+      break;
+    }
+
+    case MenuActionType::ResetNextTap: {
+      scheduleNextTap();
+      menu_reset();
+      ui12864_markDirty();
+      break;
+    }
+
+    case MenuActionType::SetTapDuration: {
+      if (act.u16a == 0) {
+        menu_openTapDurationEditor(tapDuration);
+        ui12864_markDirty();
+      } else {
+        tapDuration = act.u16a;
+        ui_showTapDuration(tapDuration);
+        menu_reset();
+        ui12864_markDirty();
+      }
+      break;
+    }
+    
+    case MenuActionType::SetSleepTime: {
+      menu_openSleepTimeEditor(sched.sleepHour, sched.sleepMinute);
+      ui12864_markDirty();
+      break;
+    }
+
+    case MenuActionType::SetWakeTime: {
+      menu_openWakeTimeEditor(sched.wakeHour, sched.wakeMinute);
+      ui12864_markDirty();
+      break;
+    }
+
+    case MenuActionType::ToggleTestMode: {
+      testModeEnabled = !testModeEnabled;
+
+      if (!testModeEnabled) {
+        baseInterval = baseIntervalActual;
+        jitterRange = jitterRangeActual;
+        pauseBetweenTaps = pauseBetweenTapsActual;
+        adGemTaps = adGemTapsActual;
+        floatGemTaps = floatGemTapsActual;
+      } else {
+        baseInterval = baseIntervalTest;
+        jitterRange = jitterRangeTest;
+        pauseBetweenTaps = pauseBetweenTapsTest;
+        adGemTaps = adGemTapsTest;
+        floatGemTaps = floatGemTapsTest;
+      }
+
+      scheduleNextTap();
+      menu_reset();
+      ui12864_markDirty();
+      break;
+    }
+
+    case MenuActionType::ToggleOverrideSleep: {
+      overrideClock = !overrideClock;
+      menu_reset();
+      ui12864_markDirty();
+      break;
+    }
+
+    // Wire the rest later (SetTapDuration, SetSleepTime, etc.)
+    default:
+      break;
+  }
+}
+
+static void renderMenuFrame(uint32_t msLeft, uint32_t gems, const EncoderEvents& ev) {
+  // live data for home view
+  MenuHomeData hd;
+  hd.lifetimeGems = gems;
+  hd.msLeft = msLeft;
+  menu_setHomeData(hd);
+
+  MenuAction act;
+  if (menu_update(ev.delta, ev.pressed, act)) {
+    handleMenuAction(act);
+  }
+
+  uint32_t secondsLeft = msLeft / 1000;
+  if (secondsLeft != lastShownSeconds || gems != lastShownGems || ev.delta != 0 || ev.pressed) {
+    lastShownSeconds = secondsLeft;
+    lastShownGems    = gems;
+    ui12864_markDirty();
+  }
+
+  // Draw current view (frame-limited inside ui12864_menu_render)
+  MenuView view;
+  menu_getView(view);
+  ui12864_menu_render(view);
 }
