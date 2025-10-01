@@ -13,7 +13,7 @@
 #include "menu.h"
 #include "ui12864_menu.h"
 
-uint16_t tapDuration = 25;
+uint16_t tapDuration = 15;
 
 // ==== Clock ====
 SleepSchedule sched;
@@ -26,8 +26,8 @@ const int numDisplayStates = 2;
 uint32_t lastShownSeconds = 0;
 
 // ==== Button Logic ====
-bool deviceEnabled = false; // device should be on to begin with (opposite this value for some reason)
-bool testModeEnabled = false;
+bool deviceEnabled = true; // device should be on to begin with (opposite this value for some reason)
+bool testModeEnabled = true;
 bool overrideClock = false;
 
 // ==== Solenoids ====
@@ -206,6 +206,9 @@ void loop() {
     ui_setMode(UIMode::SLEEP_MODE);
     ui_setBacklight(0);
     ui_showSleep(sched.wakeHour, sched.wakeMinute);
+    
+    uint32_t gemsNow = lifetimeGemCount + sessionGemCount;
+    renderMenuFrame(0, gemsNow, ev); // show 00:00 countdown as placeholder
     return;
   }
 
@@ -214,6 +217,9 @@ void loop() {
 
   if (tapper_isActive()) {
     ui_showTapping();
+
+    uint32_t gemsNow = lifetimeGemCount + sessionGemCount;
+    renderMenuFrame(0, gemsNow, ev);
     return;
   }
 
@@ -313,14 +319,30 @@ static void handleMenuAction(const MenuAction& act) {
       break;
     }
     
-    case MenuActionType::SetSleepTime: {
+    case MenuActionType::EnterSleepTimeEditor: {
       menu_openSleepTimeEditor(sched.sleepHour, sched.sleepMinute);
       ui12864_markDirty();
       break;
     }
 
-    case MenuActionType::SetWakeTime: {
+    case MenuActionType::EnterWakeTimeEditor: {
       menu_openWakeTimeEditor(sched.wakeHour, sched.wakeMinute);
+      ui12864_markDirty();
+      break;
+    }
+
+    case MenuActionType::SetSleepTime: {
+      sched.sleepHour = (uint8_t)act.u16a;
+      sched.sleepMinute = (uint8_t)act.u16b;
+      menu_reset();
+      ui12864_markDirty();
+      break;
+    }
+
+    case MenuActionType::SetWakeTime: {
+      sched.wakeHour = (uint8_t)act.u16a;
+      sched.wakeMinute = (uint8_t)act.u16b;
+      menu_reset();
       ui12864_markDirty();
       break;
     }

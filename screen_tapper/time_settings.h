@@ -10,10 +10,10 @@
 // constexpr uint8_t BED_TIME = BED_TIME_HOUR * 60 + BED_TIME_MINUTE;
 
 struct SleepSchedule{
-  uint8_t wakeHour    = 5;
-  uint8_t wakeMinute  = 45;
+  uint8_t wakeHour    = 6;
+  uint8_t wakeMinute  = 20;
   uint8_t sleepHour   = 23;
-  uint8_t sleepMinute = 30;
+  uint8_t sleepMinute = 59;
 };
 
 inline uint16_t toMinutes(uint8_t h, uint8_t m){ return h * 60u + m; }

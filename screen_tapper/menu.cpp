@@ -122,11 +122,11 @@ static bool update_settings(int d, bool pressed, MenuAction& act) {
       return true;
     
     case 4: // set sleep time
-      act.type = MenuActionType::SetSleepTime;
+      act.type = MenuActionType::EnterSleepTimeEditor;
       return true;
     
     case 5: // set wake time
-      act.type = MenuActionType::SetWakeTime;
+      act.type = MenuActionType::EnterWakeTimeEditor;
       return true;
 
     case 6: // set gem count
