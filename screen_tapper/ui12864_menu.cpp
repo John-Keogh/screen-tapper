@@ -10,7 +10,7 @@ static U8G2_ST7920_128X64_F_SW_SPI u8g2(U8G2_R0, LCD12864_CLK, LCD12864_DAT, LCD
 // fonts
 static const uint8_t* FONT_TITLE   = u8g2_font_7x14B_tf;    // header
 static const uint8_t* FONT_BODY    = u8g2_font_6x10_tf;     // normal text
-static const uint8_t* FONT_NUMBER  = u8g2_font_logisoso16_tf;    // big numbers
+static const uint8_t* FONT_NUMBER  = u8g2_font_helvB10_tf;    // big numbers
 static const uint8_t* FONT_SMALL   = u8g2_font_5x8_tf;      // tiny helpers
 
 // layout
@@ -25,6 +25,11 @@ static const uint8_t GEM_Y            = 30;
 static const uint8_t TAP_DURATION_Y   = 26;
 static const uint8_t CLOCK_Y          = 26;
 static const uint8_t COLUMN_GAP       = 20;
+static const uint8_t X_HOME_1         = 0;    // icon in first column
+static const uint8_t X_HOME_2         = 19;   // text in first column
+static const uint8_t Y_HOME_1         = 13;
+static const uint8_t X_HOME_SPACE     = 80;
+static const uint8_t Y_HOME_SPACE     = 15;
 
 // first visible row for list views
 static uint8_t s_first = 0;
@@ -99,6 +104,84 @@ static const unsigned char countdown16_bitmap[] U8X8_PROGMEM = {
   0b00000000, 0b00000000,
 };
 
+// wake symbol (clock)
+static const unsigned char clock16_bitmap[] U8X8_PROGMEM = {
+  0b00000000, 0b00000000,
+  0b00000000, 0b00000000,
+  0b00000000, 0b00000000,
+  0b10000000, 0b00000011,
+  0b00000000, 0b00000001,
+  0b11000000, 0b00000011,
+  0b00100000, 0b00000100,
+  0b00010000, 0b00001001,
+  0b00010000, 0b00001001,
+  0b11010000, 0b00001000,
+  0b00010000, 0b00001000,
+  0b00100000, 0b00000100,
+  0b11000000, 0b00000011,
+  0b00000000, 0b00000000,
+  0b00000000, 0b00000000,
+  0b00000000, 0b00000000,
+};
+
+// sleep symbol (moon)
+// static const unsigned char moon16_bitmap[] U8X8_PROGMEM = {
+//   0b00000000, 0b00000000,
+//   0b00000000, 0b00000000,
+//   0b00000000, 0b00000000,
+//   0b01000000, 0b00000000,
+//   0b00100000, 0b00000000,
+//   0b00110000, 0b00000000,
+//   0b00110000, 0b00000000,
+//   0b01110000, 0b00000000,
+//   0b11110000, 0b00001001,
+//   0b11100000, 0b00000111,
+//   0b11000000, 0b00000011,
+//   0b00000000, 0b00000000,
+//   0b00000000, 0b00000000,
+//   0b00000000, 0b00000000,
+//   0b00000000, 0b00000000,
+//   0b00000000, 0b00000000,
+// };
+
+// static const unsigned char moon16_bitmap[] U8X8_PROGMEM = {
+//   0b00000000, 0b00000000,
+//   0b00000000, 0b00000000,
+//   0b11000000, 0b00000001,
+//   0b11100000, 0b00000000,
+//   0b01110000, 0b00000000,
+//   0b01111000, 0b00000000,
+//   0b01111000, 0b00000000,
+//   0b01111000, 0b00000000,
+//   0b11111000, 0b00000000,
+//   0b11111000, 0b00100011,
+//   0b11111000, 0b00111111,
+//   0b11110000, 0b00011111,
+//   0b11100000, 0b00001111,
+//   0b11000000, 0b00000011,
+//   0b00000000, 0b00000000,
+//   0b00000000, 0b00000000,  
+// };
+
+static const unsigned char moon16_bitmap[] U8X8_PROGMEM = {
+  0b00000000, 0b00000000,
+  0b00000000, 0b00000000,
+  0b11000000, 0b00000001,
+  0b10100000, 0b00000000,
+  0b01010000, 0b00000000,
+  0b01001000, 0b00000000,
+  0b01001000, 0b00000000,
+  0b01001000, 0b00000000,
+  0b10001000, 0b00000000,
+  0b00001000, 0b00100011,
+  0b00001000, 0b00111100,
+  0b00010000, 0b00010000,
+  0b00100000, 0b00001100,
+  0b11000000, 0b00000011,
+  0b00000000, 0b00000000,
+  0b00000000, 0b00000000,  
+};
+
 
 // small helpers
 static void headerBar(const char* title) {
@@ -152,35 +235,103 @@ static void maybeMarkDirtyFromView(const MenuView& v) {
 
 // views
 static void viewHome(const MenuView& v) {
-  u8g2.drawFrame(0, 0, W, H);
+  // gem count
+  // time remaining
+  // sleep time
+  // wake time
+  // on/off - make separate off screen?
+  // override sleep - maybe just incorporate to sleep/wake time?
+  // tap duration
 
-  // big gem count in the middle
+  // gem count - [0, 0]
   char gems[24];
   fmt_commas(v.lifetimeGems, gems, sizeof(gems));
   u8g2.setFont(FONT_NUMBER);
-  int16_t gemsW   = u8g2.getStrWidth(gems);
-  int16_t totalGemsW  = 16 + 2 + gemsW;  // 16 px icon + spacing
-  int16_t gx = (W - totalGemsW) / 2;
-  int16_t gy = GEM_Y;
+  int16_t gems_x = X_HOME_1;
+  int16_t gems_y = Y_HOME_1;
 
-  u8g2.drawXBMP(gx, gy - 15, 16, 16, gem16_bitmap);  // adjust -16 if FONT_NUMBER is ~16px tall
-  u8g2.setCursor(gx + 16 + 2, gy);
+  u8g2.drawXBMP(gems_x, gems_y - 12, 16, 16, gem16_bitmap);  // adjust -16 if FONT_NUMBER is ~16px tall
+  u8g2.setCursor(gems_x + X_HOME_2, gems_y);
   u8g2.print(gems);
 
-  // countdown to next tap
-  char t[16];
-  fmt_mm_ss(v.msLeft, t, sizeof(t));
+  // countdown to next tap - [1, 0]
+  char tapCountdown[16];
+  fmt_mm_ss(v.msLeft, tapCountdown, sizeof(tapCountdown));
   u8g2.setFont(FONT_NUMBER);
-  int16_t timeW = u8g2.getStrWidth(t);
-  // int16_t totalTimeW = 16 + 2 + timeW;
-  // int16_t tx = (W - totalTimeW) / 2;
-  int16_t tx = (W - timeW) / 2;
-  int16_t ty = H - 10;
+  int16_t tapTime_x = X_HOME_1 + X_HOME_2;
+  int16_t tapTime_y = Y_HOME_1 + Y_HOME_SPACE;
 
   // u8g2.drawXBMP(tx, ty - 15, 16, 16, countdown16_bitmap);
   // u8g2.setCursor(tx + 16 + 2, ty);
-  u8g2.setCursor(tx, ty);
-  u8g2.print(t);
+  u8g2.setCursor(tapTime_x, tapTime_y);
+  u8g2.print(tapCountdown);
+
+  // sleep time - [2, 0]
+  char sleepTime[8];
+  snprintf(sleepTime, sizeof(sleepTime), "%02u:%02u", (unsigned)v.sleepHour, (unsigned)v.sleepMinute);
+  u8g2.setFont(FONT_NUMBER);
+  int16_t sleepTime_x = X_HOME_1 + X_HOME_2;
+  int16_t sleepTime_y = Y_HOME_1 + 2 * Y_HOME_SPACE;
+  u8g2.drawXBMP(sleepTime_x - X_HOME_2, sleepTime_y - 13, 16, 16, moon16_bitmap);  // adjust -16 if FONT_NUMBER is ~16px tall
+  u8g2.setCursor(sleepTime_x, sleepTime_y);
+  u8g2.print(sleepTime);
+
+  // wake time - [3, 0]
+  char wakeTime[8];
+  snprintf(wakeTime, sizeof(wakeTime), "%02u:%02u", (unsigned)v.wakeHour, (unsigned)v.wakeMinute);
+  u8g2.setFont(FONT_NUMBER);
+  int16_t wakeTime_x = X_HOME_1 + X_HOME_2;
+  int16_t wakeTime_y = Y_HOME_1 + 3 * Y_HOME_SPACE;
+  u8g2.drawXBMP(wakeTime_x - X_HOME_2, wakeTime_y - 13, 16, 16, clock16_bitmap);  // adjust -16 if FONT_NUMBER is ~16px tall
+  u8g2.setCursor(wakeTime_x, wakeTime_y);
+  u8g2.print(wakeTime);
+
+  // tap duration - [0, 1]
+  char tapDurationStr[12];
+  snprintf(tapDurationStr, sizeof(tapDurationStr), "%u ms", (unsigned)v.tapDuration);
+  int16_t tapDurationStr_x = X_HOME_1 + X_HOME_SPACE;
+  int16_t tapDurationStr_y = Y_HOME_1;
+  u8g2.setCursor(tapDurationStr_x, tapDurationStr_y);
+  u8g2.print(tapDurationStr);
+
+  // device enabled - [1, 1]
+  const char* deviceOnOff;
+  if (v.deviceEnabled) {
+    deviceOnOff = "On";
+    } else {
+      deviceOnOff = "Off";
+    }
+  u8g2.setFont(FONT_NUMBER);
+  int16_t deviceOnOff_x = X_HOME_1 + X_HOME_SPACE;
+  int16_t deviceOnOff_y = Y_HOME_1 + Y_HOME_SPACE;
+  u8g2.setCursor(deviceOnOff_x, deviceOnOff_y);
+  u8g2.print(deviceOnOff);
+
+  // override sleep - [2, 1]
+  const char* overrideClockOnOff;
+  if (v.overrideClock) {
+    overrideClockOnOff = "OVR";
+    } else {
+      overrideClockOnOff = "";
+    }
+  u8g2.setFont(FONT_NUMBER);
+  int16_t overrideClockOnOff_x = X_HOME_1 + X_HOME_SPACE;
+  int16_t overrideClockOnOff_y = Y_HOME_1 + 2 * Y_HOME_SPACE;
+  u8g2.setCursor(overrideClockOnOff_x, overrideClockOnOff_y);
+  u8g2.print(overrideClockOnOff);
+
+  // test mode - [3, 1]
+  const char* testModeDisplay;
+  if (v.testModeEnabled) {
+    testModeDisplay = "TEST";
+  } else {
+    testModeDisplay = "";
+  }
+  u8g2.setFont(FONT_NUMBER);
+  uint16_t testModeDisplay_x = X_HOME_1 + X_HOME_SPACE;
+  uint16_t testModeDisplay_y = Y_HOME_1 + 3 * Y_HOME_SPACE;
+  u8g2.setCursor(testModeDisplay_x, testModeDisplay_y);
+  u8g2.print(testModeDisplay);
 }
 
 static void viewList(const MenuView& v) {
@@ -469,8 +620,6 @@ static void viewEditTime(const MenuView& v) {
 
 // API
 void ui12864_menu_begin() {
-  // pinMode(LCD12864_LED, OUTPUT);
-  // ui12864_setBacklight(255);
   u8g2.begin();
   // u8g2.setBusClock(50000); // 50 kHz; uncomment if you see noise
   u8g2.clearBuffer();
@@ -479,6 +628,17 @@ void ui12864_menu_begin() {
   u8g2.sendBuffer();
   lcdDirty = true;
   nextFrameMs = 0;
+}
+
+void ui12864_lcd_backlight_begin(uint8_t ledPin) {
+  pinMode(ledPin, OUTPUT);
+  analogWrite(ledPin, 0); // full brightness
+}
+
+void ui12864_lcd_backlight_set(uint8_t ledPin, uint8_t level) {
+  if (level > 255) level = 255;
+  if (level < 0) level = 255;
+  analogWrite(ledPin, level);
 }
 
 void ui12864_markDirty() {

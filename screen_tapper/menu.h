@@ -45,6 +45,18 @@ struct MenuView {
   uint32_t lifetimeGems = 0;
   uint32_t msLeft = 0;
 
+  // sleep/wake times initialization (set in time_settings.h)
+  uint8_t wakeHour    = 0;
+  uint8_t wakeMinute  = 0;
+  uint8_t sleepHour   = 0;
+  uint8_t sleepMinute = 0;
+
+  // statuses
+  bool deviceEnabled = true;
+  bool overrideClock = false;
+  uint16_t tapDuration = 0;
+  bool testModeEnabled = false;
+
   // list view
   const char* const* items = nullptr;
   uint8_t itemCount = 0;

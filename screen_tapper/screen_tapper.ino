@@ -13,7 +13,7 @@
 #include "menu.h"
 #include "ui12864_menu.h"
 
-uint16_t tapDuration = 15;
+uint16_t tapDuration = 21;
 
 // ==== Clock ====
 SleepSchedule sched;
@@ -27,7 +27,7 @@ uint32_t lastShownSeconds = 0;
 
 // ==== Button Logic ====
 bool deviceEnabled = true; // device should be on to begin with (opposite this value for some reason)
-bool testModeEnabled = true;
+bool testModeEnabled = false;
 bool overrideClock = false;
 
 // ==== Solenoids ====
@@ -80,6 +80,7 @@ void setup() {
   encoder_begin(ENCODER_CLK, ENCODER_DT, ENCODER_SW);
   menu_begin();
   ui12864_menu_begin();
+  ui12864_lcd_backlight_begin(LCD12864_LED);
 
   input_begin();
 
@@ -402,8 +403,24 @@ static void renderMenuFrame(uint32_t msLeft, uint32_t gems, const EncoderEvents&
     ui12864_markDirty();
   }
 
+  // ---- Build the final view snapshot for this frame ----
+  MenuView v;
+  menu_getView(v);              // base view from the menu state machine
+  v.lifetimeGems = gems;        // ensure these are current for this frame
+  v.msLeft       = msLeft;
+
+  // inject sleep/wake from sched
+  v.sleepHour   = sched.sleepHour;
+  v.sleepMinute = sched.sleepMinute;
+  v.wakeHour    = sched.wakeHour;
+  v.wakeMinute  = sched.wakeMinute;
+
+  // inject statuses
+  v.deviceEnabled = deviceEnabled;
+  v.overrideClock = overrideClock;
+  v.tapDuration   = tapDuration;
+  v.testModeEnabled = testModeEnabled;
+
   // Draw current view (frame-limited inside ui12864_menu_render)
-  MenuView view;
-  menu_getView(view);
-  ui12864_menu_render(view);
+  ui12864_menu_render(v);
 }
