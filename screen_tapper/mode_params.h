@@ -4,15 +4,15 @@
 // replace with a structure
 const uint32_t baseIntervalActual       = 670000; // nominal time between taps (ms)
 const uint32_t jitterRangeActual        = 16000;  // jitter for time between taps (ms)
-const uint32_t pauseBetweenTapsActual   = 500;
+const uint32_t pauseBetweenTapsActual   = 750;
 const uint8_t adGemTapsActual           = 5;
-const uint8_t floatGemTapsActual        = 25;
+const uint8_t floatGemTapsActual        = 17;
 
-const uint32_t baseIntervalTest         = 5000;
+const uint32_t baseIntervalTest         = 7000;
 const uint32_t jitterRangeTest          = 0;
-const uint32_t pauseBetweenTapsTest     = 500;
-const uint8_t adGemTapsTest             = 4;
-const uint8_t floatGemTapsTest          = 4;
+const uint32_t pauseBetweenTapsTest     = 750;
+const uint8_t adGemTapsTest             = 3;
+const uint8_t floatGemTapsTest          = 5;
 
 // struct ModeParams {
 //   uint32_t baseInterval;
