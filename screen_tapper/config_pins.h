@@ -1,8 +1,8 @@
 #pragma once
 
 // MOSFET gates
-constexpr int AD_GEMS_MOSFET_GATE_PIN = 26;
-constexpr int FLOAT_GEMS_MOSFET_GATE_PIN = 22;
+constexpr int AD_GEMS_MOSFET_GATE_PIN = 9;
+constexpr int FLOAT_GEMS_MOSFET_GATE_PIN = 11;
 
 // Buttons (eventually remove once LCD module is added)
 constexpr int ONOFF_BUTTON_PIN = 37;

@@ -71,6 +71,8 @@ void setup() {
 
   clock_begin();
   bool rtcAvailable = clock_available(); // this isn't used for anything?
+  
+  tapper_setDuty(130);
 
   tapper_begin(AD_GEMS_MOSFET_GATE_PIN, FLOAT_GEMS_MOSFET_GATE_PIN);
 

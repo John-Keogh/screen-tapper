@@ -16,9 +16,26 @@ static bool     s_solenoidOn = false;
 static uint32_t s_phaseStart = 0;
 static uint16_t s_tapDuration = 10;
 static uint16_t s_pause = 1000;
+static uint8_t s_solenoidDuty = 255;
 
-static void driveLow(uint8_t pin)   { digitalWrite(pin, LOW); }
-static void driveHigh(uint8_t pin)  { digitalWrite(pin, HIGH); }
+// Global PWM “strength” for the solenoid (0–255)
+// Start at 255 (full power), then experiment with lower values like 200, 180, 150, etc.
+// static uint8_t s_solenoidDuty = 130;
+
+void tapper_setDuty(uint8_t duty) {
+  if (duty > 255) duty = 255;
+  s_solenoidDuty = duty;
+}
+
+static void driveLow(uint8_t pin) {
+  // Turn PWM fully off
+  analogWrite(pin, 0);
+}
+
+static void driveHigh(uint8_t pin) {
+  // Drive at configured PWM duty cycle
+  analogWrite(pin, s_solenoidDuty);
+}
 
 void tapper_begin(uint8_t adPin, uint8_t floatPin) {
   s_adPin = adPin;

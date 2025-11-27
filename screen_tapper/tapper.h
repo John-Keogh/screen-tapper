@@ -9,6 +9,7 @@ void tapper_startCycle(
   uint16_t  pauseMs,
   uint32_t  nowMs
 );
+void tapper_setDuty(uint8_t duty);  // solenoid power PWM level
 bool tapper_update(uint32_t nowMs);   // returns true exactly once when the full tap cycle is complete
 void tapper_stop();   // emergency stop (turns outputs LOW, clears state)
 bool tapper_isActive();   // true while any stage is running

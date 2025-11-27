@@ -14,14 +14,23 @@ const uint32_t pauseBetweenTapsTest     = 750;
 const uint8_t adGemTapsTest             = 3;
 const uint8_t floatGemTapsTest          = 5;
 
-// struct ModeParams {
-//   uint32_t baseInterval;
-//   uint32_t jitterRange;
-//   uint16_t pauseBetweenTaps;
-//   uint8_t adGemTaps;
-//   uint8_t floatGemTaps;
-//   uint16_t tapDurationMs;
-// };
+struct ModeParamsActual {
+  uint32_t baseInterval;
+  uint32_t jitterRange;
+  uint16_t pauseBetweenTaps;
+  uint8_t adGemTaps;
+  uint8_t floatGemTaps;
+  uint16_t tapDurationMs;
+};
+
+struct ModeParamsTest {
+  uint32_t baseInterval;
+  uint32_t jitterRange;
+  uint16_t pauseBetweenTaps;
+  uint8_t adGemTaps;
+  uint8_t floatGemTaps;
+  uint16_t tapDurationMs;
+};
 
 // namespace Modes {
 //   inline const ModeParams Actual  { 670000, 16000, 1250, 7, 10, 10 };
