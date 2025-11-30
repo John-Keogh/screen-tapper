@@ -1,6 +1,6 @@
 # Screen Tapper
 
-Updated 11/23/25 - current version is 1.2
+Updated 11/29/25 - current version is 1.2
 
 In 2024, I got addicted to a mobile game containing a currency that can only be acquired by tapping the screen every so often. While I've been running the game 24/7 on an old device, I'm unable to claim this currency because I leave the device at home, and my schedule only allows me to collect for a few hours each day. After getting tired of being bottlenecked by this currency, I decided to try to create a device that would farm for me while I was away. The terms of service of this specific game do explicitly state that the use of external software/hardware to gain an unfair advantage can result in the abuser's account being banned. Arguably, this isn't an unfair advantage because I am not exceeding the limits of what would theoretically be possible if I were to play the game all day every day. Regardless, my goal with this device is to be as undetectable as possible, so I'll omit details about the specific game. I have accepted the fact that I could be banned for this, and I'm okay with that. Learning about electronics and continuing to broaden my engineering skills is well worth the risk, especially since I've been having so much fun with this project.
 
@@ -31,3 +31,10 @@ Software is mostly complete, offering a variety of manual controls including tap
 ### Mechanical Housing
 
 The current housing is highly simplified, clean, and sturdy. I will need to update it if I add a third solenoid. Otherwise, I would still like to experiment with the idea of creating a travel version, but that would likely only come after I upgraded the electronics to a custom PCB. Otherwise, I may experiment with moving the LCD in order to make the entire device lower profile since that is currently driving the height of the device. That would likely also only come after a custom PCB implementation reduced the wires in the electronics.
+
+TODO:
+1) Add third solenoid to rear housing for alternate screen config
+2) Extend front housing by ~.5 inches to allow clearance for charging cable
+3) Raise tablet surface by ~.25 inches to avoid interference with control knob
+4) Improve cover design to ensure clean edges/seam with front housing
+5) (Optional) add supports/integration for tablet charging cable
