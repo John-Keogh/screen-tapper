@@ -13,7 +13,8 @@
 #include "menu.h"
 #include "ui12864_menu.h"
 
-uint16_t tapDuration = 100;
+uint16_t tapDuration = 150;
+uint16_t tapDuty = 150;
 
 // ==== Clock ====
 SleepSchedule sched;
@@ -72,7 +73,7 @@ void setup() {
   clock_begin();
   bool rtcAvailable = clock_available(); // this isn't used for anything?
   
-  tapper_setDuty(130);
+  tapper_setDuty(tapDuty);
 
   tapper_begin(AD_GEMS_MOSFET_GATE_PIN, FLOAT_GEMS_MOSFET_GATE_PIN);
 
