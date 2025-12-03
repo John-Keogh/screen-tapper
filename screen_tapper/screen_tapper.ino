@@ -13,8 +13,8 @@
 #include "menu.h"
 #include "ui12864_menu.h"
 
-uint16_t tapDuration = 150;
-uint16_t tapDuty = 150;
+uint16_t tapDuration = 160;
+uint16_t tapDuty = 160;
 
 // ==== Clock ====
 SleepSchedule sched;
