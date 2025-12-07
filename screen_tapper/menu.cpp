@@ -9,6 +9,7 @@ static const char* const kSettingsItems[] = {
   "Toggle On/Off",
   "Reset Next Tap",
   "Set Tap Duration",
+  "Set Tap Duty",
   "Set Sleep Time",
   "Set Wake Time",
   "Set Gem Count",
@@ -20,9 +21,12 @@ static constexpr uint8_t kSettingsCount = sizeof(kSettingsItems) / sizeof(kSetti
 // editor configs
 static constexpr uint32_t TAP_MIN_MS    = 1;
 static constexpr uint32_t TAP_MAX_MS    = 1000;
+static constexpr uint32_t TAP_DUTY_MIN  = 0;
+static constexpr uint32_t TAP_DUTY_MAX  = 255;
 static constexpr uint32_t GEMS_MIN      = 0;
 static constexpr uint32_t GEMS_MAX      = 999999999;
 static constexpr const char* UNIT_MS    = "ms";
+static constexpr const char* UNIT_DUTY  = "/255";
 static constexpr const char* UNIT_GEMS  = "gems";
 
 // state
@@ -69,7 +73,7 @@ static void enter_settings() {
 }
 
 static void enter_num_editor(uint32_t initial, uint32_t minV, uint32_t maxV, const char* unit) {
-  s_screen  = MenuScreen::EditTapDuration; // default
+  // s_screen  = MenuScreen::EditTapDuration; // default
   s_numVal  = initial;
   s_numMin  = minV;
   s_numMax  = maxV;
@@ -121,23 +125,27 @@ static bool update_settings(int d, bool pressed, MenuAction& act) {
       act.type = MenuActionType::SetTapDuration;
       return true;
     
-    case 4: // set sleep time
+    case 4: // adjust tap duty (power - PWM)
+      act.type = MenuActionType::SetTapDuty;
+      return true;
+    
+    case 5: // set sleep time
       act.type = MenuActionType::EnterSleepTimeEditor;
       return true;
     
-    case 5: // set wake time
+    case 6: // set wake time
       act.type = MenuActionType::EnterWakeTimeEditor;
       return true;
 
-    case 6: // set gem count
+    case 7: // set gem count
       act.type = MenuActionType::SetGemCount;
       return true;
 
-    case 7: // toggle test mode
+    case 8: // toggle test mode
       act.type = MenuActionType::ToggleTestMode;
       return true;
 
-    case 8: // toggle override sleep
+    case 9: // toggle override sleep
       act.type = MenuActionType::ToggleOverrideSleep;
       return true;
   }
@@ -161,7 +169,8 @@ static bool update_num_editor(int d, bool pressed, MenuAction& act, MenuActionTy
         
         case 1: // save -> emit action and go home
           act.type = commitType;
-          if (commitType == MenuActionType::SetTapDuration) {
+          if (commitType == MenuActionType::SetTapDuration ||
+              commitType == MenuActionType::SetTapDuty) {
             act.u16a = (uint16_t)s_numVal;
           } else if (commitType == MenuActionType::SetGemCount) {
             act.u32 = s_numVal;
@@ -266,6 +275,9 @@ bool menu_update(int encDelta, bool pressed, MenuAction& outAction) {
     case MenuScreen::EditTapDuration:
       return update_num_editor(encDelta, pressed, outAction, MenuActionType::SetTapDuration);
 
+    case MenuScreen::EditTapDuty:
+      return update_num_editor(encDelta, pressed, outAction, MenuActionType::SetTapDuty);
+
     case MenuScreen::EditGemCount:
       return update_num_editor(encDelta, pressed, outAction, MenuActionType::SetGemCount);
 
@@ -309,6 +321,18 @@ void menu_getView(MenuView& v) {
       v.selected      = s_sel;
       break;
     
+    case MenuScreen::EditTapDuty:
+      v.kind          = ViewKind::EditNumber;
+      v.title         = "Tap Duty";
+      v.value         = s_numVal;
+      v.minVal        = TAP_DUTY_MIN;
+      v.maxVal        = TAP_DUTY_MAX;
+      v.unit          = UNIT_DUTY;
+      v.editing       = s_editing;
+      v.items         = nullptr;
+      v.selected      = s_sel;
+      break;
+    
     case MenuScreen::EditGemCount:
       v.kind          = ViewKind::EditNumber;
       v.title         = "Gem Count";
@@ -343,16 +367,21 @@ void menu_getView(MenuView& v) {
 }
 
 void menu_openTapDurationEditor(uint32_t initial) {
-  enter_num_editor(initial, TAP_MIN_MS, TAP_MAX_MS, UNIT_MS);
   s_screen = MenuScreen::EditTapDuration;
+  enter_num_editor(initial, TAP_MIN_MS, TAP_MAX_MS, UNIT_MS);
+}
+
+void menu_openTapDutyEditor(uint32_t initial) {
+  s_screen = MenuScreen::EditTapDuty;
+  enter_num_editor(initial, TAP_DUTY_MIN, TAP_DUTY_MAX, UNIT_DUTY);
 }
 
 void menu_openSleepTimeEditor(uint8_t hh, uint8_t mm) {
-  enter_time_editor(hh, mm);
   s_screen = MenuScreen::EditSleepTime;
+  enter_time_editor(hh, mm);
 }
 
 void menu_openWakeTimeEditor(uint8_t hh, uint8_t mm) {
-  enter_time_editor(hh, mm);
   s_screen = MenuScreen::EditWakeTime;
+  enter_time_editor(hh, mm);
 }

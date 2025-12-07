@@ -6,6 +6,7 @@ enum class MenuScreen {
   Home,
   Settings,
   EditTapDuration,
+  EditTapDuty,
   EditSleepTime,
   EditWakeTime,
   EditGemCount,
@@ -18,6 +19,7 @@ enum class MenuActionType {
   ToggleDeviceEnabled,
   ResetNextTap,
   SetTapDuration,
+  SetTapDuty,
   EnterSleepTimeEditor,
   SetSleepTime,
   EnterWakeTimeEditor,
@@ -97,6 +99,7 @@ void menu_getView(MenuView& outView);
 
 // open the tap duration number editor
 void menu_openTapDurationEditor(uint32_t initial);
+void menu_openTapDutyEditor(uint32_t currentDuty);
 
 // open time editor
 void menu_openSleepTimeEditor(uint8_t hh, uint8_t mm);

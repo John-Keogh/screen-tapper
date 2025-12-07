@@ -322,6 +322,19 @@ static void handleMenuAction(const MenuAction& act) {
       }
       break;
     }
+
+    case MenuActionType::SetTapDuty: {
+      if (act.u16a == 0) {
+        menu_openTapDutyEditor(tapDuty);
+        ui12864_markDirty();
+      } else {
+        tapDuty = act.u16a;
+        tapper_setDuty(tapDuty);
+        menu_reset();
+        ui12864_markDirty();
+      }
+      break;
+    }
     
     case MenuActionType::EnterSleepTimeEditor: {
       menu_openSleepTimeEditor(sched.sleepHour, sched.sleepMinute);
