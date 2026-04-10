@@ -6,21 +6,24 @@
 #include "tapper.h"
 #include "gem_store.h"
 #include "encoder.h"
+#include "button.h"
 #include "menu.h"
 #include "display.h"
+#include "settings_store.h"
 
 // ===========================================================================
 // Application state
 // ===========================================================================
 
-// Tap settings (adjustable at runtime via menu)
+// Tap settings — initialized from EEPROM in setup(), then kept in sync.
 uint16_t tapDuration = 160;
 uint16_t tapDuty     = 160;
 
 // Active mode parameters (switches between kModeActual and kModeTest)
 ModeParams activeMode = kModeActual;
 
-// Sleep schedule (adjustable at runtime via menu)
+// Sleep schedule — defaults in SleepSchedule struct, overwritten by
+// settings_load() if valid EEPROM data exists.
 SleepSchedule sched;
 
 // Device flags
@@ -30,6 +33,19 @@ bool overrideClock   = false;
 
 // Tap scheduling
 unsigned long nextTapTime = 0;
+
+// ===========================================================================
+// Helpers
+// ===========================================================================
+
+// Build a Settings snapshot from current runtime state for EEPROM saves.
+static Settings currentSettings() {
+    Settings s;
+    s.sched       = sched;
+    s.tapDuration = tapDuration;
+    s.tapDuty     = tapDuty;
+    return s;
+}
 
 // ===========================================================================
 // Forward declarations
@@ -50,17 +66,28 @@ void setup() {
 
     clock_begin();
 
+    // Load persisted settings before initializing hardware that uses them.
+    Settings s;
+    settings_load(s);
+    sched       = s.sched;
+    tapDuration = s.tapDuration;
+    tapDuty     = s.tapDuty;
+
     tapper_setDuty(tapDuty);
     tapper_begin(AD_GEMS_MOSFET_GATE_PIN, FLOAT_GEMS_MOSFET_GATE_PIN);
 
     encoder_begin(ENCODER_CLK, ENCODER_DT, ENCODER_SW);
+    button_begin(RESET_BUTTON_PIN);
     menu_begin();
     display_begin();
 
     gem_store_begin();
 
-    Serial.print(F("Lifetime gems: "));
-    Serial.println(gem_store_read_lifetime());
+    Serial.print(F("Lifetime gems: ")); Serial.println(gem_store_read_lifetime());
+    Serial.print(F("Sleep:         ")); Serial.print(sched.sleepHour); Serial.print(':'); Serial.println(sched.sleepMinute);
+    Serial.print(F("Wake:          ")); Serial.print(sched.wakeHour);  Serial.print(':'); Serial.println(sched.wakeMinute);
+    Serial.print(F("Tap duration:  ")); Serial.print(tapDuration); Serial.println(F(" ms"));
+    Serial.print(F("Tap duty:      ")); Serial.println(tapDuty);
 
     scheduleNextTap();
 }
@@ -72,8 +99,8 @@ void setup() {
 void loop() {
     uint32_t now = millis();
 
-    // --- Input: poll encoder and process menu immediately ---
-    // State is committed before rendering so changes appear in the same frame.
+    // --- Input: encoder ---
+    // Processed before rendering so state changes appear in the same frame.
     EncoderEvents ev = encoder_poll();
     bool hadInput = (ev.delta != 0 || ev.pressed);
 
@@ -81,6 +108,15 @@ void loop() {
     bool actionFired = menu_update(ev.delta, ev.pressed, act);
     if (actionFired) {
         handleMenuAction(act);
+    }
+
+    // --- Input: reset button ---
+    // Reschedules the next tap immediately, regardless of device or sleep state.
+    if (button_poll()) {
+        scheduleNextTap();
+        hadInput = true;
+        display_markDirty();
+        Serial.println(F("Reset button: next tap rescheduled"));
     }
 
     // --- Sleep/wake transition ---
@@ -102,6 +138,8 @@ void loop() {
             now
         );
 
+        // Gem accounting: 5 gems per activation, +2 bonus every 6th activation.
+        // TODO: refine once earning rates are fully characterized.
         static uint8_t activationCount = 0;
         uint32_t earned = 5;
         activationCount++;
@@ -113,25 +151,21 @@ void loop() {
         scheduleNextTap();
     }
 
-    // --- Render display ---
+    // --- Compute msLeft ---
+    // When the device is off, force to zero so the display shows 00:00.
     uint32_t msLeft = 0;
-    int32_t  dt     = (int32_t)(nextTapTime - now);
-    if (dt > 0) msLeft = (uint32_t)dt;
+    if (deviceEnabled) {
+        int32_t dt = (int32_t)(nextTapTime - now);
+        if (dt > 0) msLeft = (uint32_t)dt;
+    }
 
+    // --- Render display ---
     MenuView v = buildMenuView(msLeft);
 
     if (hadInput || actionFired) {
-        // Input occurred this frame: render immediately, bypassing the limiter.
-        // This is what makes the menu feel instant — the user never waits for
-        // the rate-limit window to expire after a click or rotation.
         display_markDirty();
         display_renderNow(v);
     } else {
-        // No input: use the rate-limited path. Only redraws when dirty AND
-        // the frame period has elapsed, preventing wasteful redraws on frames
-        // where only a few milliseconds have passed with nothing changing.
-
-        // Auto-dirty when the countdown ticks or gem count changes
         static uint32_t lastSecondsLeft = UINT32_MAX;
         static uint32_t lastGems        = UINT32_MAX;
         uint32_t secondsLeft = msLeft / 1000;
@@ -140,7 +174,6 @@ void loop() {
             lastSecondsLeft = secondsLeft;
             lastGems        = v.lifetimeGems;
         }
-
         display_render(v);
     }
 }
@@ -152,8 +185,6 @@ void loop() {
 void scheduleNextTap() {
     long jitter = random(-(long)activeMode.jitterRangeMs, (long)activeMode.jitterRangeMs);
 
-    // Occasionally insert a longer "distraction break" (3–8 min) to look more human.
-    // Skipped in test mode to keep test cycles fast and predictable.
     bool addBreak = !testModeEnabled && (random(12) == 0);
     unsigned long base = millis() + activeMode.baseIntervalMs;
     if (addBreak) {
@@ -196,11 +227,10 @@ static void handleMenuAction(const MenuAction& act) {
 
         case MenuActionType::SetTapDuration:
             if (!act.committed) {
-                // "Set Tap Duration" selected from settings — open the editor
                 menu_openTapDurationEditor(tapDuration);
             } else {
-                // Value saved from the editor
                 tapDuration = act.u16a;
+                settings_save(currentSettings());
                 menu_reset();
             }
             display_markDirty();
@@ -212,6 +242,7 @@ static void handleMenuAction(const MenuAction& act) {
             } else {
                 tapDuty = act.u16a;
                 tapper_setDuty(tapDuty);
+                settings_save(currentSettings());
                 menu_reset();
             }
             display_markDirty();
@@ -231,6 +262,7 @@ static void handleMenuAction(const MenuAction& act) {
             if (act.committed) {
                 sched.sleepHour   = (uint8_t)act.u16a;
                 sched.sleepMinute = (uint8_t)act.u16b;
+                settings_save(currentSettings());
                 menu_reset();
                 display_markDirty();
             }
@@ -240,6 +272,7 @@ static void handleMenuAction(const MenuAction& act) {
             if (act.committed) {
                 sched.wakeHour   = (uint8_t)act.u16a;
                 sched.wakeMinute = (uint8_t)act.u16b;
+                settings_save(currentSettings());
                 menu_reset();
                 display_markDirty();
             }
@@ -249,7 +282,6 @@ static void handleMenuAction(const MenuAction& act) {
             if (!act.committed) {
                 menu_openGemCountEditor(gem_store_total());
             } else {
-                // act.u32 holds the new lifetime count — zero is a valid value
                 gem_store_write_lifetime(act.u32);
                 menu_reset();
             }
@@ -280,17 +312,14 @@ static void handleMenuAction(const MenuAction& act) {
 // ===========================================================================
 
 static MenuView buildMenuView(uint32_t msLeft) {
-    // Push live home-screen data to the menu module
     MenuHomeData hd;
     hd.lifetimeGems = gem_store_total();
     hd.msLeft       = msLeft;
     menu_setHomeData(hd);
 
-    // Build the view snapshot from current menu state
     MenuView v;
     menu_getView(v);
 
-    // Inject live application state
     v.lifetimeGems    = gem_store_total();
     v.msLeft          = msLeft;
     v.sleepHour       = sched.sleepHour;

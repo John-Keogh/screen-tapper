@@ -25,6 +25,9 @@ constexpr int LCD12864_CLK = 4;
 constexpr int LCD12864_DAT = 6;
 constexpr int LCD12864_CS  = 8;
 
+// Tap-timer reset button (mounted on LCD module, INPUT_PULLUP, active LOW)
+constexpr int RESET_BUTTON_PIN = 31;
+
 // =============================================================================
 // TAP TIMING PARAMETERS
 // =============================================================================
