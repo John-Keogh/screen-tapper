@@ -16,14 +16,14 @@ constexpr int AD_GEMS_MOSFET_GATE_PIN    = 9;
 constexpr int FLOAT_GEMS_MOSFET_GATE_PIN = 11;
 
 // Rotary encoder
-constexpr int ENCODER_CLK = 3;
-constexpr int ENCODER_DT  = 7;
-constexpr int ENCODER_SW  = 5;
+constexpr int ENCODER_CLK = 40;
+constexpr int ENCODER_DT  = 42;
+constexpr int ENCODER_SW  = 44;
 
 // 128x64 LCD (ST7920, software SPI) — pins 4, 6, 8 only; backlight not PWM-controlled
-constexpr int LCD12864_CLK = 4;
-constexpr int LCD12864_DAT = 6;
-constexpr int LCD12864_CS  = 8;
+constexpr int LCD12864_CLK = 53;
+constexpr int LCD12864_DAT = 51;
+constexpr int LCD12864_CS  = 49;
 
 // Tap-timer reset button (mounted on LCD module, INPUT_PULLUP, active LOW)
 constexpr int RESET_BUTTON_PIN = 31;
